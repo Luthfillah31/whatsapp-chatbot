@@ -1,0 +1,119 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>🎾 Asisten Resepsionis AI Klub Tenis - Simulator Langsung</title>
+    <!-- Google Fonts: Outfit & Inter -->
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600&family=Outfit:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="/static/style.css?v=20260706">
+</head>
+<body>
+    <div class="app-container">
+        <!-- Top Navigation Header -->
+        <header class="navbar glass-panel">
+            <div class="brand">
+                <span class="logo-icon">🎾</span>
+                <div class="brand-text">
+                    <h1>Klub Tenis Grand Slam</h1>
+                    <p>Resepsionis AI & Gerbang Reservasi WhatsApp</p>
+                </div>
+            </div>
+            <div class="system-badges">
+                <span class="badge status-badge"><span class="dot pulse"></span> AI Aktif</span>
+                <span class="badge tech-badge" id="model-badge">OpenRouter API</span>
+                <span class="badge sync-badge" id="sync-badge">Mode Database Lokal</span>
+            </div>
+        </header>
+
+        <!-- Main Dashboard Split Layout -->
+        <main class="dashboard-grid">
+            <!-- LEFT PANEL: Live Court Availability Schedule -->
+            <section class="schedule-panel glass-panel">
+                <div class="panel-header">
+                    <div class="title-with-icon">
+                        <svg class="icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="3" y="4" width="18" height="18" rx="2" ry="2"></rect><line x1="16" y1="2" x2="16" y2="6"></line><line x1="8" y1="2" x2="8" y2="6"></line><line x1="3" y1="10" x2="21" y2="10"></line></svg>
+                        <h2>Ketersediaan Lapangan Langsung</h2>
+                    </div>
+                    <div class="date-controls">
+                        <input type="date" id="schedule-date" class="date-input">
+                        <button id="refresh-btn" class="btn btn-icon" title="Segarkan Jadwal">↻</button>
+                    </div>
+                </div>
+
+                <div class="court-legend">
+                    <span class="legend-item"><span class="box avail"></span> Tersedia (Rp400.000/jam)</span>
+                    <span class="legend-item"><span class="box booked"></span> Terpesan / Terisi</span>
+                </div>
+
+                <div class="schedule-table-wrapper">
+                    <table class="schedule-table">
+                        <thead>
+                            <tr>
+                                <th>Slot Waktu</th>
+                                <th>Lap. Tenis 1 🎾</th>
+                                <th>Lap. Tenis 2 🎾</th>
+                            </tr>
+                        </thead>
+                        <tbody id="schedule-body">
+                            <tr>
+                                <td colspan="3" class="loading-state">Memuat jadwal lapangan waktu nyata...</td>
+                            </tr>
+                        </tbody>
+                    </table>
+                </div>
+            </section>
+
+            <!-- RIGHT PANEL: Interactive WhatsApp Chat Simulator -->
+            <section class="chat-panel glass-panel">
+                <div class="chat-header">
+                    <div class="chat-profile">
+                        <div class="avatar">🤖</div>
+                        <div class="profile-info">
+                            <h3>AI Resepsionis Klub Tenis</h3>
+                            <span class="online-status">Simulator Bot WhatsApp</span>
+                        </div>
+                    </div>
+                    <div class="user-config">
+                        <label for="sim-phone">No. HP Saya:</label>
+                        <input type="text" id="sim-phone" value="+15550192" class="config-input">
+                        <label for="sim-name">Nama Saya:</label>
+                        <input type="text" id="sim-name" value="Alex Customer" class="config-input">
+                    </div>
+                </div>
+
+                <!-- Chat Messages Feed -->
+                <div class="chat-feed" id="chat-feed">
+                    <div class="message assistant">
+                        <div class="bubble">
+                            <p>🎾 **Selamat datang di Klub Tenis Grand Slam!** Saya adalah resepsionis AI Anda.</p>
+                            <p>Ada yang bisa saya bantu hari ini? Anda dapat memeriksa ketersediaan lapangan, memesan lapangan, atau mengelola reservasi Anda!</p>
+                        </div>
+                        <span class="time">Baru saja</span>
+                    </div>
+                </div>
+
+                <!-- Quick Action Chips -->
+                <div class="quick-chips">
+                    <button class="chip" data-text="Halo! Berapa harga sewa lapangan dan jam operasional klub ini?">💡 Harga &amp; Jam Operasional</button>
+                    <button class="chip" data-text="Apakah ada lapangan yang kosong besok sore sekitar jam 4 sore?">🔍 Cek Besok Jam 16:00</button>
+                    <button class="chip" data-text="Tolong pesan Lapangan 1 besok jam 16:00 sampai 17:00">📅 Pesan Lapangan 1</button>
+                    <button class="chip" data-text="Bisa tolong tunjukkan daftar pesanan saya?">📋 Pesananku</button>
+                </div>
+
+                <!-- Message Input Bar -->
+                <form class="chat-form" id="chat-form">
+                    <input type="text" id="chat-input" class="chat-input" placeholder="Ketik pesan seperti sedang mengirim chat WhatsApp..." autocomplete="off" required>
+                    <button type="submit" class="btn btn-primary send-btn" id="send-btn">
+                        <span>Kirim</span>
+                        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" class="send-icon"><line x1="22" y1="2" x2="11" y2="13"></line><polygon points="22 2 15 22 11 13 2 9 22 2"></polygon></svg>
+                    </button>
+                </form>
+            </section>
+        </main>
+    </div>
+    <script src="/static/script.js?v=fixed_2"></script>
+</body>
+</html>

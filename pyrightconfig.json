@@ -1,0 +1,6 @@
+{
+  "pythonPath": ".pixi/envs/default/python.exe",
+  "extraPaths": [
+    ".pixi/envs/default/Lib/site-packages"
+  ]
+}

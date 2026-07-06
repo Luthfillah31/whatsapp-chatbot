@@ -1,0 +1,23 @@
+# pixi environments
+.pixi/*
+!.pixi/config.toml
+
+# Environment variables & secrets
+.env
+*.env
+
+# Databases & local logs
+*.db
+*.sqlite
+*.sqlite3
+
+# Python cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# IDE & AI logs
+.agents/
+.gemini/
+.vscode/
