@@ -1,3 +1,12 @@
+---
+title: WhatsApp Tennis Court Chatbot API
+emoji: 🎾
+colorFrom: green
+colorTo: blue
+sdk: docker
+pinned: false
+---
+
 # 🎾 WhatsApp Tennis Court Booking Chatbot
 
 A production-ready, AI-powered WhatsApp chatbot built with **Python (FastAPI)**, **OpenRouter API** (with structured Tool & Function Calling), and **Google Calendar API / SQL Database** for managing bookings across 2 tennis courts.
