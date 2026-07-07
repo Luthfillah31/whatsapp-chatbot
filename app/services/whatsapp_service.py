@@ -122,94 +122,92 @@ def format_text_for_whatsapp(text: str) -> str:
 
 def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -> bool:
     """
-    Ultimate fallback: raw IPv4 socket with explicit DNS resolution and TCP MSS clamping (1200 bytes)
-    to prevent cloud container MTU blackholes during SSL certificate handshakes.
+    Ultimate fallback: loops through ALL resolved IPv4 addresses for graph.facebook.com
+    with a 5-second connect/handshake timeout and TCP MSS clamping (1024 bytes)
+    to bypass cloud container geo-routing and MTU blackholes.
     """
     import socket
     import ssl
 
-    # Step 1: Force IPv4 DNS resolution
+    # Step 1: Force IPv4 DNS resolution and extract unique IPs
     try:
         addrs = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
         if not addrs:
             logger.error(f"No IPv4 addresses found for {host}")
             return False
-        ip = addrs[0][4][0]
-        logger.info(f"Resolved {host} to IPv4: {ip}")
+        ips = list(dict.fromkeys([addr[4][0] for addr in addrs if addr[4] and addr[4][0]]))
+        # Prioritize 57.x and 157.x subnets which have proven reliable on Hugging Face Spaces
+        ips.sort(key=lambda ip: 0 if ip.startswith(("57.", "157.")) else 1)
+        logger.info(f"Resolved {host} to IPv4 candidates: {ips}")
     except Exception as e:
         logger.error(f"IPv4 DNS resolution failed for {host}: {e}")
         return False
 
-    # Step 2: Create raw socket and clamp TCP MSS to 1200 bytes BEFORE connect
-    # This prevents cloud container MTU (1420/1460) packet drops on large TLS ServerHello/Certificates!
-    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-    try:
-        if hasattr(socket, "TCP_MAXSEG"):
-            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, 1200)
-            logger.info("TCP MSS clamped to 1200 bytes to prevent TLS MTU drop.")
-    except Exception as e:
-        logger.debug(f"Could not set TCP_MAXSEG: {e}")
+    body = json.dumps(data).encode("utf-8")
+    request_line = f"POST {path} HTTP/1.1\r\n"
+    header_str = f"Host: {host}\r\n"
+    for k, v in headers.items():
+        header_str += f"{k}: {v}\r\n"
+    header_str += f"Content-Length: {len(body)}\r\n"
+    header_str += "Connection: close\r\n\r\n"
+    payload = (request_line + header_str).encode("utf-8") + body
 
-    sock.settimeout(20)
-    try:
-        sock.connect((ip, 443))
-    except Exception as e:
-        logger.error(f"TCP connection to {ip}:443 failed: {e}")
-        sock.close()
-        return False
+    # Step 2: Loop through all candidate IPv4 addresses
+    for ip in ips:
+        logger.info(f"Trying raw socket connection to {host} via IPv4: {ip} ...")
+        sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
+        try:
+            if hasattr(socket, "TCP_MAXSEG"):
+                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, 1024)
+        except Exception as e:
+            logger.debug(f"Could not set TCP_MAXSEG: {e}")
 
-    # Step 3: SSL/TLS handshake with SNI
-    ssock = None
-    try:
-        context = ssl.create_default_context()
-        ssock = context.wrap_socket(sock, server_hostname=host)
-        logger.info(f"SSL handshake to {host} ({ip}) succeeded!")
-    except Exception as e:
-        logger.error(f"SSL handshake to {host} ({ip}) failed: {e}")
-        sock.close()
-        return False
+        sock.settimeout(5.0)
+        ssock = None
+        try:
+            sock.connect((ip, 443))
+            context = ssl.create_default_context()
+            ssock = context.wrap_socket(sock, server_hostname=host)
+            logger.info(f"SSL handshake to {host} ({ip}) succeeded!")
 
-    # Step 4: Send raw HTTP/1.1 request
-    try:
-        body = json.dumps(data).encode("utf-8")
-        request_line = f"POST {path} HTTP/1.1\r\n"
-        header_str = f"Host: {host}\r\n"
-        for k, v in headers.items():
-            header_str += f"{k}: {v}\r\n"
-        header_str += f"Content-Length: {len(body)}\r\n"
-        header_str += "Connection: close\r\n\r\n"
+            # Send HTTP request
+            ssock.sendall(payload)
 
-        ssock.sendall((request_line + header_str).encode("utf-8") + body)
+            # Read response
+            response = b""
+            while True:
+                chunk = ssock.recv(4096)
+                if not chunk:
+                    break
+                response += chunk
+            ssock.close()
 
-        # Read response
-        response = b""
-        while True:
-            chunk = ssock.recv(4096)
-            if not chunk:
-                break
-            response += chunk
-        ssock.close()
+            # Parse HTTP status from first line
+            first_line = response.split(b"\r\n")[0].decode(errors="replace")
+            status_code = int(first_line.split(" ")[1])
+            body_start = response.find(b"\r\n\r\n") + 4
+            resp_body = response[body_start:].decode(errors="replace")
 
-        # Parse HTTP status from first line
-        first_line = response.split(b"\r\n")[0].decode(errors="replace")
-        status_code = int(first_line.split(" ")[1])
-        body_start = response.find(b"\r\n\r\n") + 4
-        resp_body = response[body_start:].decode(errors="replace")
-
-        if status_code == 200:
-            logger.info(f"Meta message sent via raw IPv4 socket! Response: {resp_body[:200]}")
-            return True
-        else:
-            logger.error(f"Meta raw socket error ({status_code}): {resp_body[:500]}")
-            return False
-    except Exception as e:
-        logger.error(f"Raw socket send failed: {e}", exc_info=True)
-        if ssock:
+            if status_code == 200:
+                logger.info(f"Meta message sent successfully via IPv4 {ip}! Response: {resp_body[:200]}")
+                return True
+            else:
+                logger.error(f"Meta API error ({status_code}) from {ip}: {resp_body[:500]}")
+                # If Meta returned an HTTP response, the network is fine; no need to try other IPs
+                return False
+        except Exception as e:
+            logger.warning(f"Raw socket attempt to {ip} failed ({e}), trying next IP candidate...")
             try:
-                ssock.close()
+                if ssock:
+                    ssock.close()
+                else:
+                    sock.close()
             except Exception:
                 pass
-        return False
+
+    logger.error("All IPv4 candidates for graph.facebook.com failed.")
+    return False
+
 
 
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
