@@ -15,7 +15,7 @@ class Settings(BaseSettings):
     COURT_2_NAME: str = "Tennis Court 2"
     CLUB_OPENING_HOUR: str = "07:00"
     CLUB_CLOSING_HOUR: str = "22:00"
-    HOURLY_RATE_USD: int = 40
+    HOURLY_RATE_USD: int = 0
 
     # Database
     DATABASE_URL: str = "sqlite:///./tennis_courts.db"

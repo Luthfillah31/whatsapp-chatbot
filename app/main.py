@@ -15,8 +15,8 @@ logger = logging.getLogger(__name__)
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="🎾 Tennis Court WhatsApp Chatbot API",
-    description="Production-grade WhatsApp AI chatbot powered by OpenRouter, FastAPI, and Google Calendar / SQL Database.",
+    title="🎾 Sistem Reservasi Lapangan Tenis Warga - Komplek Perumahan",
+    description="Production-grade AI chatbot powered by OpenRouter for residential complex tennis court reservations via Telegram & WhatsApp.",
     version="1.0.0"
 )
 

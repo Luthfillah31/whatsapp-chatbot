@@ -123,7 +123,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const tdC1 = document.createElement("td");
             tdC1.className = `slot-cell ${slot.court_1_status.toLowerCase()}`;
             if (slot.court_1_status === "Available") {
-                tdC1.innerHTML = `<span>🟢 Tersedia (Rp400.000/jam)</span>`;
+                tdC1.innerHTML = `<span>🟢 Tersedia (Gratis)</span>`;
             } else {
                 const phoneStr1 = slot.court_1_phone ? ` (${slot.court_1_phone})` : '';
                 tdC1.innerHTML = `<span>🔴 Terpesan</span> <span class="booking-badge">${slot.court_1_customer || 'Terisi'}${phoneStr1}</span>`;
@@ -134,7 +134,7 @@ document.addEventListener("DOMContentLoaded", () => {
             const tdC2 = document.createElement("td");
             tdC2.className = `slot-cell ${slot.court_2_status.toLowerCase()}`;
             if (slot.court_2_status === "Available") {
-                tdC2.innerHTML = `<span>🟢 Tersedia (Rp400.000/jam)</span>`;
+                tdC2.innerHTML = `<span>🟢 Tersedia (Gratis)</span>`;
             } else {
                 const phoneStr2 = slot.court_2_phone ? ` (${slot.court_2_phone})` : '';
                 tdC2.innerHTML = `<span>🔴 Terpesan</span> <span class="booking-badge">${slot.court_2_customer || 'Terisi'}${phoneStr2}</span>`;
