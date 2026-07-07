@@ -145,13 +145,29 @@ document.addEventListener("DOMContentLoaded", () => {
         });
     }
 
+    function formatChatText(text) {
+        // Escape HTML
+        let formatted = text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
+        // Double asterisks **bold** -> <b>bold</b>
+        formatted = formatted.replace(/\*\*(.*?)\*\*/g, "<b>$1</b>");
+        // WhatsApp single asterisk *bold* -> <b>bold</b>
+        formatted = formatted.replace(/\*(.*?)\*/g, "<b>$1</b>");
+        // WhatsApp _italic_ -> <i>italic</i>
+        formatted = formatted.replace(/_(.*?)_/g, "<i>$1</i>");
+        // WhatsApp ~strikethrough~ -> <del>strikethrough</del>
+        formatted = formatted.replace(/~(.*?)~/g, "<del>$1</del>");
+        // Line breaks
+        formatted = formatted.replace(/\n/g, "<br>");
+        return formatted;
+    }
+
     function appendMessage(role, text) {
         const msgDiv = document.createElement("div");
         msgDiv.className = `message ${role}`;
         
         const bubble = document.createElement("div");
         bubble.className = "bubble";
-        bubble.textContent = text;
+        bubble.innerHTML = formatChatText(text);
         
         const timeSpan = document.createElement("span");
         timeSpan.className = "time";
