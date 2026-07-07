@@ -7,7 +7,7 @@ from app.config import settings
 
 # Page config with modern title and icon
 st.set_page_config(
-    page_title="Grand Slam Tennis - Owner Dashboard",
+    page_title="Sistem Reservasi Lapangan Warga - Admin Dashboard",
     page_icon="🎾",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -30,17 +30,17 @@ st.markdown("""
     
     /* Premium Header Banner */
     .header-banner {
-        background: linear-gradient(135deg, #1e3a8a 0%, #3b82f6 50%, #06b6d4 100%);
+        background: linear-gradient(135deg, #065f46 0%, #059669 50%, #10b981 100%);
         padding: 2.5rem;
         border-radius: 16px;
         color: white;
         margin-bottom: 2rem;
-        box-shadow: 0 10px 25px -5px rgba(59, 130, 246, 0.4);
+        box-shadow: 0 10px 25px -5px rgba(16, 185, 129, 0.4);
         position: relative;
         overflow: hidden;
     }
     .header-banner::after {
-        content: "🎾";
+        content: "🏡";
         font-size: 8rem;
         position: absolute;
         right: -20px;
@@ -100,8 +100,8 @@ st.markdown("""
 # Header Section
 st.markdown("""
 <div class="header-banner">
-    <div class="header-title">🎾 Grand Slam Tennis Club</div>
-    <div class="header-subtitle">Owner Schedule Monitoring & Revenue Intelligence Dashboard</div>
+    <div class="header-title">🎾 Sistem Reservasi Lapangan Tenis Warga</div>
+    <div class="header-subtitle">Dashboard Pengurus & Monitoring Jadwal Lapangan Warga Komplek Perumahan</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -117,8 +117,8 @@ with ctrl_col1:
     date_str = selected_date.strftime("%Y-%m-%d")
 
 with ctrl_col2:
-    st.markdown("#### ℹ️ Info Operasional Klub")
-    st.write(f"**Tarif**: Rp400.000 (${settings.HOURLY_RATE_USD}) / jam &nbsp;|&nbsp; **Jam Buka**: {settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR}")
+    st.markdown("#### ℹ️ Info Operasional Lapangan")
+    st.write(f"**Tarif**: GRATIS 100% (Khusus Warga) &nbsp;|&nbsp; **Jam Buka**: {settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB")
 
 with ctrl_col3:
     st.markdown("<br>", unsafe_allow_html=True)
@@ -143,11 +143,6 @@ booked_c2 = sum(1 for s in slots if s.court_2_status == "Booked")
 total_booked = booked_c1 + booked_c2
 total_avail = total_slots - total_booked
 occupancy_rate = (total_booked / total_slots * 100) if total_slots > 0 else 0.0
-
-# Revenue calculation (assuming Rp 400.000 per slot based on $40 rate in settings)
-rate_idr = int(settings.HOURLY_RATE_USD) * 10000
-est_revenue_idr = total_booked * rate_idr
-est_revenue_usd = total_booked * int(settings.HOURLY_RATE_USD)
 
 # KPI Cards Section
 col1, col2, col3, col4 = st.columns(4)
@@ -179,10 +174,10 @@ with col3:
 with col4:
     st.markdown(f"""
     <div class="kpi-card">
-        <div class="kpi-label">Estimasi Pendapatan</div>
-        <div class="kpi-value">Rp {est_revenue_idr:,}</div>
+        <div class="kpi-label">Status Fasilitas</div>
+        <div class="kpi-value">GRATIS <span style="font-size:1.2rem; color:#34d399;">100%</span></div>
     </div>
-    """.replace(",", "."), unsafe_allow_html=True)
+    """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
 
@@ -223,4 +218,4 @@ st.dataframe(
 
 # Footer info
 st.markdown("---")
-st.caption("🔒 Dashboard Pribadi Pemilik - Grand Slam Tennis Club AI Assistant. Data bersumber langsung dari Database SQL waktu nyata.")
+st.caption("🔒 Dashboard Pengurus Komplek - Sistem Reservasi Lapangan Tenis Warga. Data bersumber langsung dari Database SQL waktu nyata.")
