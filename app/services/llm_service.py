@@ -249,7 +249,6 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
             db=db,
             customer_phone=default_phone  # Enforced sender phone
         )
-        # Sanitize: strip sensitive fields before sending to LLM
         safe_bookings = _sanitize_bookings_for_llm(res)
         return {"bookings": safe_bookings, "count": len(safe_bookings)}
 
@@ -296,7 +295,9 @@ def process_chat_message(
     ):
         db.query(ChatHistory).filter(ChatHistory.phone_number == phone_number).delete(synchronize_session=False)
         db.commit()
-        return f"🎾 **Halo {sender_name}! Selamat datang di Sistem Reservasi Lapangan Tenis Warga.**\n\n✨ _Memori percakapan sebelumnya telah dibersihkan 100%!_ Ada jadwal lapangan yang ingin dicek atau dibooking hari ini?"
+        short_name = sender_name.split()[0] if sender_name and sender_name != "Warga" else ""
+        greet = f" {short_name}" if short_name else ""
+        return f"🎾 **Halo{greet}! Selamat datang di Sistem Reservasi Lapangan Tenis Warga.**\n\nAda jadwal lapangan yang ingin dicek atau dibooking hari ini?"
 
     # 1. Log user message to DB
     user_msg_db = ChatHistory(phone_number=phone_number, role="user", content=message_text)
