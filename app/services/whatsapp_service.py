@@ -122,8 +122,8 @@ def format_text_for_whatsapp(text: str) -> str:
 
 def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -> bool:
     """
-    Ultimate fallback: raw IPv4 socket with explicit DNS resolution.
-    Bypasses ALL HTTP libraries. Forces IPv4 DNS, raw TCP + TLS with SNI.
+    Ultimate fallback: raw IPv4 socket with explicit DNS resolution and TCP MSS clamping (1200 bytes)
+    to prevent cloud container MTU blackholes during SSL certificate handshakes.
     """
     import socket
     import ssl
@@ -140,14 +140,25 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
         logger.error(f"IPv4 DNS resolution failed for {host}: {e}")
         return False
 
-    # Step 2: Raw TCP connection to IPv4 address
+    # Step 2: Create raw socket and clamp TCP MSS to 1200 bytes BEFORE connect
+    # This prevents cloud container MTU (1420/1460) packet drops on large TLS ServerHello/Certificates!
+    sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
     try:
-        sock = socket.create_connection((ip, 443), timeout=15)
+        if hasattr(socket, "TCP_MAXSEG"):
+            sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, 1200)
+            logger.info("TCP MSS clamped to 1200 bytes to prevent TLS MTU drop.")
+    except Exception as e:
+        logger.debug(f"Could not set TCP_MAXSEG: {e}")
+
+    sock.settimeout(20)
+    try:
+        sock.connect((ip, 443))
     except Exception as e:
         logger.error(f"TCP connection to {ip}:443 failed: {e}")
+        sock.close()
         return False
 
-    # Step 3: SSL/TLS handshake with correct hostname for SNI + cert verification
+    # Step 3: SSL/TLS handshake with SNI
     ssock = None
     try:
         context = ssl.create_default_context()
@@ -180,7 +191,7 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
         ssock.close()
 
         # Parse HTTP status from first line
-        first_line = response.split(b"\r\n")[0].decode()
+        first_line = response.split(b"\r\n")[0].decode(errors="replace")
         status_code = int(first_line.split(" ")[1])
         body_start = response.find(b"\r\n\r\n") + 4
         resp_body = response[body_start:].decode(errors="replace")
@@ -202,7 +213,7 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
 
 
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
-    """Sends a text message reply via Meta WhatsApp Cloud API with multi-stage fallback."""
+    """Sends a text message reply via Meta WhatsApp Cloud API with MSS clamping and fallback."""
     formatted_text = format_text_for_whatsapp(text)
     if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
@@ -222,7 +233,14 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         "text": {"body": formatted_text}
     }
 
-    # Attempt 1: httpx with forced IPv4 binding and retries
+    # Attempt 1: Raw IPv4 socket with TCP MSS clamping (1200 bytes) to bypass MTU blackhole
+    logger.info("Attempting outbound WhatsApp message via raw socket with MSS clamping...")
+    result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
+    if result:
+        return True
+
+    # Attempt 2: httpx with forced IPv4 binding and retries
+    logger.warning("Raw socket failed, trying httpx fallback...")
     try:
         transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
         async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
@@ -234,14 +252,10 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
                 logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
                 return False
     except Exception as e:
-        logger.warning(f"httpx Meta outbound failed ({e}), trying raw IPv4 socket...")
-
-    # Attempt 2: Raw IPv4 socket (bypasses all HTTP libraries)
-    result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
-    if result:
-        return True
+        logger.error(f"httpx Meta outbound failed: {e}")
 
     logger.error("All outbound methods to graph.facebook.com failed.")
+    return False
 
 
 async def send_evolution_message(phone_number: str, text: str) -> bool:
