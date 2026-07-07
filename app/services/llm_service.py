@@ -169,6 +169,7 @@ IDENTITAS PENGGUNA AKTIF:
 3. CEK RESERVASI SAYA: Jika warga ingin melihat pesanan mereka, langsung tampilkan daftar jadwal main mereka dengan rapi dan mudah dibaca.
    - Jika tidak ada jadwal di nomor saat ini, tanyakan dengan ramah: "Boleh tahu saat itu dibooking atas nama siapa dan nomor HP berapa agar bisa saya bantu carikan?"
 4. PEMBATALAN: Jika ingin batal, minta ID Booking (dan nama terdaftar jika nomor kontaknya berbeda), lalu proses pembatalan agar jadwal bisa dipakai warga lain.
+5. RESET MEMORI / HAPUS HISTORY: Jika warga ingin mengulang percakapan dari awal atau menghapus memori chat, arahkan mereka untuk mengetik perintah **/reset**, **/clear**, atau **/start**.
 
 ===== FORMATTING PESAN =====
 - Gunakan tanda bintang ganda **untuk tebal** saat menyoroti Nama Lapangan, Jam, atau Tanggal agar rapi dan mudah dibaca di Telegram maupun WhatsApp.
@@ -284,6 +285,19 @@ def process_chat_message(
     3. Executes function calls if requested by the model.
     4. Returns finalized natural language response.
     """
+    # 0. Check for reset/clear/start commands to wipe memory
+    clean_text = message_text.strip().lower()
+    if (
+        clean_text in ["/start", "/reset", "/clear", "/hapus", "reset", "hapus history", "mulai dari awal", "restart"]
+        or clean_text.startswith("/start")
+        or clean_text.startswith("/reset")
+        or clean_text.startswith("/clear")
+        or clean_text.startswith("/hapus")
+    ):
+        db.query(ChatHistory).filter(ChatHistory.phone_number == phone_number).delete(synchronize_session=False)
+        db.commit()
+        return f"🎾 **Halo {sender_name}! Selamat datang di Sistem Reservasi Lapangan Tenis Warga.**\n\n✨ _Memori percakapan sebelumnya telah dibersihkan 100%!_ Ada jadwal lapangan yang ingin dicek atau dibooking hari ini?"
+
     # 1. Log user message to DB
     user_msg_db = ChatHistory(phone_number=phone_number, role="user", content=message_text)
     db.add(user_msg_db)
