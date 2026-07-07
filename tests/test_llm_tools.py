@@ -96,8 +96,8 @@ def test_execute_tool_call_booking_and_listing(test_db):
 
 
 def test_execute_tool_call_2factor_verification(test_db):
-    """Test executing book_court with custom preferred phone and find_booking_by_verification tool."""
-    # 1. Book Court 2 with preferred phone 08123456789 from default_phone +15550000
+    """Test executing book_court and find_booking_by_verification tool."""
+    # 1. Book Court 2 under default_phone +15550000
     book_res = execute_tool_call(
         db=test_db,
         tool_name="book_court",
@@ -105,28 +105,27 @@ def test_execute_tool_call_2factor_verification(test_db):
             "court_id": 2,
             "date": "2026-11-11",
             "time_slot": "10:00",
-            "customer_name": "Sarah Connor",
-            "customer_phone": "08123456789"
+            "customer_name": "Sarah Connor"
         },
         default_phone="+15550000"
     )
     assert book_res["success"] is True
 
-    # 2. List bookings for default_phone (+15550000) -> should be 0 because it was registered under 08123456789
+    # 2. List bookings for default_phone (+15550000) -> should be 1
     list_res = execute_tool_call(
         db=test_db,
         tool_name="list_my_bookings",
         arguments={},
         default_phone="+15550000"
     )
-    assert list_res["count"] == 0
+    assert list_res["count"] == 1
 
-    # 3. Find booking by 2-factor verification (matching phone + exact name)
+    # 3. Find booking by verification (matching phone + exact name)
     verify_res = execute_tool_call(
         db=test_db,
         tool_name="find_booking_by_verification",
         arguments={
-            "customer_phone": "08123456789",
+            "customer_phone": "+15550000",
             "customer_name": "sarah connor"
         },
         default_phone="+15550000"
@@ -135,12 +134,12 @@ def test_execute_tool_call_2factor_verification(test_db):
     assert verify_res["count"] == 1
     assert verify_res["bookings"][0]["registered_name"] == "Sarah Connor"
 
-    # 4. Find booking by 2-factor verification with wrong name -> not_found
+    # 4. Find booking by verification with wrong name -> not_found
     verify_res_fail = execute_tool_call(
         db=test_db,
         tool_name="find_booking_by_verification",
         arguments={
-            "customer_phone": "08123456789",
+            "customer_phone": "+15550000",
             "customer_name": "John Connor"
         },
         default_phone="+15550000"

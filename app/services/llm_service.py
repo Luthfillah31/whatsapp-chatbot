@@ -70,10 +70,6 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     "customer_name": {
                         "type": "string",
                         "description": "Full name of the customer booking the court."
-                    },
-                    "customer_phone": {
-                        "type": "string",
-                        "description": "Optional preferred phone number to register the reservation under. If the customer specifies a preference during registration, provide it here. Otherwise omit to use their active WhatsApp number."
                     }
                 },
                 "required": ["court_id", "date", "time_slot", "customer_name"]
@@ -163,12 +159,12 @@ IDENTITAS PENGGUNA AKTIF:
 ===== ALUR PELAYANAN RESERVASI WARGA =====
 1. CEK JADWAL: Jika warga bertanya jadwal kosong, periksa secara internal lalu langsung beritahu jam mana yang tersedia dengan bahasa sehari-hari yang ramah.
 2. BOOKING LAPANGAN:
-   - Tanyakan NAMA LENGKAP warga secara santai untuk dicantumkan pada jadwal.
-   - Tanyakan apakah nomor kontaknya memakai nomor saat ini ({sender_phone}) atau ada nomor lain.
-   - Setelah konfirmasi, daftarkan pesanan dan ucapkan selamat berolahraga dengan hangat!
+   - Tanyakan NAMA LENGKAP atau nama singkat warga secara santai untuk dicantumkan pada jadwal.
+   - JANGAN PERNAH MENANYAKAN NOMOR HP/KONTAK! Nomor kontak otomatis menggunakan akun yang sedang aktif saat ini.
+   - Setelah warga menyebutkan nama dan jadwal yang diinginkan, langsung proses pendaftaran pesanan dan ucapkan selamat berolahraga dengan hangat!
 3. CEK RESERVASI SAYA: Jika warga ingin melihat pesanan mereka, langsung tampilkan daftar jadwal main mereka dengan rapi dan mudah dibaca.
-   - Jika tidak ada jadwal di nomor saat ini, tanyakan dengan ramah: "Boleh tahu saat itu dibooking atas nama siapa dan nomor HP berapa agar bisa saya bantu carikan?"
-4. PEMBATALAN: Jika ingin batal, minta ID Booking (dan nama terdaftar jika nomor kontaknya berbeda), lalu proses pembatalan agar jadwal bisa dipakai warga lain.
+   - Jika tidak ada jadwal ditemukan, sampaikan dengan ramah bahwa belum ada jadwal terdaftar pada akun ini.
+4. PEMBATALAN: Jika ingin batal, minta ID Booking lalu proses pembatalan agar jadwal bisa dipakai warga lain.
 5. RESET MEMORI / HAPUS HISTORY: Jika warga ingin mengulang percakapan dari awal atau menghapus memori chat, arahkan mereka untuk mengetik perintah **/reset**, **/clear**, atau **/start**.
 
 ===== FORMATTING PESAN =====
@@ -219,19 +215,13 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
         return res.model_dump()
 
     elif tool_name == "book_court":
-        # Jika user memberikan preferensi nomor HP saat pendaftaran, gunakan nomor tersebut.
-        # Jika tidak ada preferensi, gunakan default_phone (nomor WA pengirim).
-        phone_to_use = arguments.get("customer_phone")
-        if not phone_to_use or not str(phone_to_use).strip():
-            phone_to_use = default_phone
-
         res = calendar_service.create_booking(
             db=db,
             court_id=arguments["court_id"],
             date=arguments["date"],
             time_slot=arguments["time_slot"],
-            customer_name=arguments.get("customer_name", "Pelanggan Setia"),
-            customer_phone=str(phone_to_use).strip()
+            customer_name=arguments.get("customer_name", "Warga"),
+            customer_phone=default_phone
         )
         return res.model_dump()
 
