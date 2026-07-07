@@ -106,7 +106,7 @@ st.markdown("""
 """, unsafe_allow_html=True)
 
 # Control Panel directly on main dashboard
-ctrl_col1, ctrl_col2, ctrl_col3 = st.columns([2, 2, 1])
+ctrl_col1, ctrl_col2 = st.columns([1, 1])
 
 with ctrl_col1:
     selected_date = st.date_input(
@@ -118,12 +118,7 @@ with ctrl_col1:
 
 with ctrl_col2:
     st.markdown("#### ℹ️ Info Operasional Lapangan")
-    st.write(f"**Tarif**: GRATIS 100% (Khusus Warga) &nbsp;|&nbsp; **Jam Buka**: {settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB")
-
-with ctrl_col3:
-    st.markdown("<br>", unsafe_allow_html=True)
-    if st.button("↻ Segarkan Data", width="stretch", type="primary"):
-        st.rerun()
+    st.write(f"**Jam Operasional**: {settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB setiap hari")
 
 st.markdown("---")
 
@@ -145,7 +140,7 @@ total_avail = total_slots - total_booked
 occupancy_rate = (total_booked / total_slots * 100) if total_slots > 0 else 0.0
 
 # KPI Cards Section
-col1, col2, col3, col4 = st.columns(4)
+col1, col2, col3 = st.columns(3)
 
 with col1:
     st.markdown(f"""
@@ -168,14 +163,6 @@ with col3:
     <div class="kpi-card">
         <div class="kpi-label">Slot Tersedia</div>
         <div class="kpi-value">{total_avail} <span style="font-size:1.2rem; color:#94a3b8;">jam</span></div>
-    </div>
-    """, unsafe_allow_html=True)
-
-with col4:
-    st.markdown(f"""
-    <div class="kpi-card">
-        <div class="kpi-label">Status Fasilitas</div>
-        <div class="kpi-value">GRATIS <span style="font-size:1.2rem; color:#34d399;">100%</span></div>
     </div>
     """, unsafe_allow_html=True)
 
