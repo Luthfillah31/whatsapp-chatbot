@@ -65,6 +65,23 @@ def check_court_availability(
     Checks if Court 1 and/or Court 2 are available on the specified date and time slot.
     Queries the local SQL database as the primary source of truth, and verifies against Google Calendar if configured.
     """
+    # Validate operating hours
+    try:
+        start_h = int(settings.CLUB_OPENING_HOUR.split(":")[0])
+        end_h = int(settings.CLUB_CLOSING_HOUR.split(":")[0])
+        req_h = int(time_slot.split(":")[0])
+        if req_h < start_h or req_h >= end_h:
+            msg = f"Mohon maaf, jam {time_slot} berada di luar jam operasional lapangan ({settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB)."
+            return CourtAvailabilityResponse(
+                date=date,
+                time_slot=time_slot,
+                court_1_available=False,
+                court_2_available=False,
+                summary_text=msg
+            )
+    except Exception:
+        pass
+
     # Query local database for confirmed bookings at this date and time
     existing_bookings = db.query(Booking).filter(
         Booking.booking_date == date,
@@ -150,6 +167,7 @@ def create_booking(
     court_name = settings.COURT_1_NAME if court_id == 1 else settings.COURT_2_NAME
 
     if not is_free:
+        msg = avail.summary_text if "operasional" in avail.summary_text.lower() else f"Sorry! {court_name} is already booked on {date} at {time_slot}. Please choose another time or check the other court."
         return BookingResponse(
             success=False,
             court_id=court_id,
@@ -158,7 +176,7 @@ def create_booking(
             start_time=time_slot,
             end_time=calculate_end_time(time_slot),
             status="failed",
-            message=f"Sorry! {court_name} is already booked on {date} at {time_slot}. Please choose another time or check the other court."
+            message=msg
         )
 
     end_time = calculate_end_time(time_slot)

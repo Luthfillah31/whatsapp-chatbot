@@ -13,8 +13,8 @@ class Settings(BaseSettings):
     # Tennis Courts Configuration
     COURT_1_NAME: str = "Tennis Court 1"
     COURT_2_NAME: str = "Tennis Court 2"
-    CLUB_OPENING_HOUR: str = "07:00"
-    CLUB_CLOSING_HOUR: str = "22:00"
+    CLUB_OPENING_HOUR: str = "05:00"
+    CLUB_CLOSING_HOUR: str = "23:00"
     HOURLY_RATE_USD: int = 0
 
     # Database
