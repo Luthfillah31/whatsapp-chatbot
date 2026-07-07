@@ -203,6 +203,3 @@ st.dataframe(
     height=550
 )
 
-# Footer info
-st.markdown("---")
-st.caption("🔒 Dashboard Pengurus Komplek - Sistem Reservasi Lapangan Tenis Warga. Data bersumber langsung dari Database SQL waktu nyata.")
