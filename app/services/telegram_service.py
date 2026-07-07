@@ -1,5 +1,8 @@
 import logging
 import httpx
+import asyncio
+import json
+import urllib.request
 from typing import Optional, List, Dict, Any
 from app.config import settings
 from app.models.schemas import IncomingChatMessage
@@ -52,9 +55,27 @@ def get_clean_token() -> str:
     return token
 
 
+def send_sync_telegram(url: str, data: dict) -> bool:
+    """Synchronous fallback using standard urllib to bypass async IPv6/TLS timeouts."""
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode("utf-8"),
+            headers={"Content-Type": "application/json"},
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=15.0) as resp:
+            if resp.status == 200:
+                logger.info("Message sent successfully via sync urllib fallback.")
+                return True
+    except Exception as e:
+        logger.error(f"Sync urllib fallback failed: {e}", exc_info=True)
+    return False
+
+
 async def send_telegram_message(chat_id: str, text: str) -> bool:
     """
-    Sends a text message reply via Telegram Bot API.
+    Sends a text message reply via Telegram Bot API with IPv4 forcing and sync fallback.
     """
     token = get_clean_token()
     if not token:
@@ -65,24 +86,27 @@ async def send_telegram_message(chat_id: str, text: str) -> bool:
     clean_chat_id = chat_id.replace("tg_", "") if chat_id.startswith("tg_") else chat_id
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
-    
     data = {
         "chat_id": clean_chat_id,
         "text": text
     }
 
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(url, json=data, timeout=20.0)
+    # Attempt 1: httpx with forced IPv4 (local_address="0.0.0.0") and retries
+    try:
+        transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
+        async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
+            resp = await client.post(url, json=data)
             if resp.status_code == 200:
-                logger.info(f"Message sent successfully to Telegram chat {clean_chat_id}.")
+                logger.info(f"Message sent successfully to Telegram chat {clean_chat_id} via httpx.")
                 return True
             else:
                 logger.error(f"Telegram API error ({resp.status_code}): {resp.text}")
                 return False
-        except Exception as e:
-            logger.error(f"HTTP request error sending Telegram message: {e}", exc_info=True)
-            return False
+    except Exception as e:
+        logger.warning(f"httpx outbound request failed ({e}), switching to sync urllib fallback...")
+
+    # Attempt 2: Synchronous urllib fallback in thread pool
+    return await asyncio.to_thread(send_sync_telegram, url, data)
 
 
 async def register_telegram_webhook(webhook_url: str) -> Dict[str, Any]:
@@ -94,11 +118,27 @@ async def register_telegram_webhook(webhook_url: str) -> Dict[str, Any]:
         return {"ok": False, "description": "TELEGRAM_BOT_TOKEN is not configured in environment."}
 
     url = f"https://api.telegram.org/bot{token}/setWebhook"
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(url, json={"url": webhook_url}, timeout=20.0)
+    data = {"url": webhook_url}
+
+    try:
+        transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
+        async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
+            resp = await client.post(url, json=data)
             return resp.json()
-        except Exception as e:
-            logger.error(f"Error setting webhook: {e}", exc_info=True)
-            return {"ok": False, "description": f"Error setting webhook: {str(e)}"}
+    except Exception as e:
+        logger.warning(f"httpx webhook setup failed ({e}), trying sync urllib...")
+        try:
+            def sync_setup():
+                req = urllib.request.Request(
+                    url,
+                    data=json.dumps(data).encode("utf-8"),
+                    headers={"Content-Type": "application/json"},
+                    method="POST"
+                )
+                with urllib.request.urlopen(req, timeout=15.0) as resp:
+                    return json.loads(resp.read().decode("utf-8"))
+            return await asyncio.to_thread(sync_setup)
+        except Exception as sync_e:
+            return {"ok": False, "description": f"Error setting webhook: {str(sync_e)}"}
+
 
