@@ -120,28 +120,80 @@ def format_text_for_whatsapp(text: str) -> str:
     return text
 
 
+def _send_via_curl(url: str, headers: dict, data: dict) -> bool:
+    """Attempt 1: Uses system curl via subprocess which has robust OS-level TLS, ALPN, and path MTU handling."""
+    import subprocess
+    try:
+        cmd = ["curl", "-s", "-X", "POST", url, "-H", "Content-Type: application/json"]
+        for k, v in headers.items():
+            if k.lower() != "content-type":
+                cmd.extend(["-H", f"{k}: {v}"])
+        cmd.extend(["-d", json.dumps(data), "--connect-timeout", "8", "--max-time", "15", "--ipv4"])
+        logger.info("Attempting outbound WhatsApp message via system curl...")
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        if res.returncode == 0 and res.stdout:
+            logger.info(f"Message sent via curl! Response: {res.stdout[:200]}")
+            try:
+                resp_json = json.loads(res.stdout)
+                if "messages" in resp_json or "id" in resp_json:
+                    return True
+                if "error" in resp_json:
+                    logger.error(f"Meta API error via curl: {res.stdout}")
+                    return False
+            except Exception:
+                pass
+            return True
+        else:
+            logger.warning(f"curl failed with returncode {res.returncode}: {res.stderr}")
+            return False
+    except Exception as e:
+        logger.warning(f"curl execution failed: {e}")
+        return False
+
+
 def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -> bool:
     """
     Ultimate fallback: loops through ALL resolved IPv4 addresses for graph.facebook.com
-    with a 5-second connect/handshake timeout and TCP MSS clamping (1024 bytes)
+    with Cloudflare DoH enrichment, a 5-second connect/handshake timeout, and TCP MSS clamping (1024 bytes)
     to bypass cloud container geo-routing and MTU blackholes.
     """
     import socket
     import ssl
 
+    ips = []
     # Step 1: Force IPv4 DNS resolution and extract unique IPs
     try:
         addrs = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
-        if not addrs:
-            logger.error(f"No IPv4 addresses found for {host}")
-            return False
-        ips = list(dict.fromkeys([addr[4][0] for addr in addrs if addr[4] and addr[4][0]]))
-        # Prioritize 57.x and 157.x subnets which have proven reliable on Hugging Face Spaces
-        ips.sort(key=lambda ip: 0 if ip.startswith(("57.", "157.")) else 1)
-        logger.info(f"Resolved {host} to IPv4 candidates: {ips}")
+        if addrs:
+            ips = list(dict.fromkeys([addr[4][0] for addr in addrs if addr[4] and addr[4][0]]))
     except Exception as e:
-        logger.error(f"IPv4 DNS resolution failed for {host}: {e}")
+        logger.debug(f"Local IPv4 DNS resolution failed for {host}: {e}")
+
+    # Step 1b: Enrich via Cloudflare DNS over HTTPS (DoH) if local DNS returns few or blocked IPs
+    try:
+        import urllib.request
+        req = urllib.request.Request(
+            f"https://1.1.1.1/dns-query?name={host}&type=A",
+            headers={"accept": "application/dns-json"}
+        )
+        with urllib.request.urlopen(req, timeout=3.0) as resp:
+            dns_data = json.loads(resp.read().decode("utf-8"))
+            for ans in dns_data.get("Answer", []):
+                if ans.get("type") == 1 and ans.get("data"):
+                    ip_val = ans.get("data")
+                    if ip_val not in ips:
+                        ips.append(ip_val)
+        logger.info(f"Enriched IPv4 candidates via Cloudflare DoH: {ips}")
+    except Exception as doh_err:
+        logger.debug(f"Cloudflare DoH lookup failed: {doh_err}")
+
+    if not ips:
+        logger.error(f"No IPv4 addresses found for {host}")
         return False
+
+    # Prioritize 157.x and 185.x subnets which have proven reliable on cloud containers
+    ips.sort(key=lambda ip: 0 if ip.startswith(("157.", "185.", "31.")) else 1)
+    logger.info(f"Final candidate IPv4 list for {host}: {ips}")
 
     body = json.dumps(data).encode("utf-8")
     request_line = f"POST {path} HTTP/1.1\r\n"
@@ -209,7 +261,6 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
     return False
 
 
-
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
     """Sends a text message reply via Meta WhatsApp Cloud API with MSS clamping and fallback."""
     formatted_text = format_text_for_whatsapp(text)
@@ -231,13 +282,18 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         "text": {"body": formatted_text}
     }
 
-    # Attempt 1: Raw IPv4 socket with TCP MSS clamping (1200 bytes) to bypass MTU blackhole
-    logger.info("Attempting outbound WhatsApp message via raw socket with MSS clamping...")
+    # Attempt 1: System curl via subprocess (OS-level network and TLS optimization)
+    result = await asyncio.to_thread(_send_via_curl, url, headers, data)
+    if result:
+        return True
+
+    # Attempt 2: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
+    logger.info("curl failed or unavailable, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
     result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
     if result:
         return True
 
-    # Attempt 2: httpx with forced IPv4 binding and retries
+    # Attempt 3: httpx with forced IPv4 binding and retries
     logger.warning("Raw socket failed, trying httpx fallback...")
     try:
         transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
