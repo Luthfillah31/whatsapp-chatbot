@@ -295,9 +295,7 @@ def process_chat_message(
     ):
         db.query(ChatHistory).filter(ChatHistory.phone_number == phone_number).delete(synchronize_session=False)
         db.commit()
-        short_name = sender_name.split()[0] if sender_name and sender_name != "Warga" else ""
-        greet = f" {short_name}" if short_name else ""
-        return f"🎾 **Halo{greet}! Selamat datang di Sistem Reservasi Lapangan Tenis Warga.**\n\nAda jadwal lapangan yang ingin dicek atau dibooking hari ini?"
+        return "🎾 **Halo Pak/Bu! Selamat datang di Sistem Reservasi Lapangan Tenis Warga.**\n\nAda jadwal lapangan yang ingin dicek atau dibooking hari ini?"
 
     # 1. Log user message to DB
     user_msg_db = ChatHistory(phone_number=phone_number, role="user", content=message_text)
