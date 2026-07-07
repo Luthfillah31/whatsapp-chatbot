@@ -1,6 +1,9 @@
 import logging
 import httpx
 import re
+import asyncio
+import json
+import urllib.request
 from typing import Optional, List, Dict, Any
 from app.config import settings
 from app.models.schemas import IncomingChatMessage
@@ -117,8 +120,28 @@ def format_text_for_whatsapp(text: str) -> str:
     return text
 
 
+def _send_meta_sync(url: str, headers: dict, data: dict) -> bool:
+    """Synchronous fallback using urllib to bypass async network issues in cloud containers."""
+    try:
+        req = urllib.request.Request(
+            url,
+            data=json.dumps(data).encode("utf-8"),
+            headers=headers,
+            method="POST"
+        )
+        with urllib.request.urlopen(req, timeout=20.0) as resp:
+            if resp.status == 200:
+                logger.info("Meta WhatsApp message sent via sync urllib fallback.")
+                return True
+            else:
+                logger.error(f"Meta sync fallback error ({resp.status}): {resp.read().decode()}")
+    except Exception as e:
+        logger.error(f"Meta sync urllib fallback failed: {e}", exc_info=True)
+    return False
+
+
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
-    """Sends a text message reply via Meta WhatsApp Cloud API."""
+    """Sends a text message reply via Meta WhatsApp Cloud API with IPv4 forcing and sync fallback."""
     formatted_text = format_text_for_whatsapp(text)
     if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
@@ -136,18 +159,22 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         "text": {"body": formatted_text}
     }
 
-    async with httpx.AsyncClient() as client:
-        try:
-            resp = await client.post(url, headers=headers, json=data, timeout=10.0)
+    # Attempt 1: httpx with forced IPv4 and retries
+    try:
+        transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
+        async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
+            resp = await client.post(url, headers=headers, json=data)
             if resp.status_code == 200:
-                logger.info(f"Message sent successfully to {phone_number} via Meta Cloud API.")
+                logger.info(f"Message sent successfully to {phone_number} via Meta Cloud API (httpx).")
                 return True
             else:
                 logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
                 return False
-        except Exception as e:
-            logger.error(f"HTTP request error sending Meta message: {e}")
-            return False
+    except Exception as e:
+        logger.warning(f"httpx Meta outbound failed ({e}), switching to sync urllib fallback...")
+
+    # Attempt 2: Synchronous urllib fallback in thread pool
+    return await asyncio.to_thread(_send_meta_sync, url, headers, data)
 
 
 async def send_evolution_message(phone_number: str, text: str) -> bool:
