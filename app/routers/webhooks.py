@@ -183,6 +183,7 @@ async def receive_telegram_webhook(request: Request):
         
         # Extract clean chat_id (remove 'tg_' prefix)
         clean_chat_id = msg.sender_phone.replace("tg_", "") if msg.sender_phone.startswith("tg_") else msg.sender_phone
+        formatted_reply = telegram_service.format_text_for_telegram(reply_text)
         
         logger.info(f"Replying to Telegram chat {clean_chat_id} via webhook response (no outbound HTTP needed).")
         
@@ -192,7 +193,8 @@ async def receive_telegram_webhook(request: Request):
         return JSONResponse(content={
             "method": "sendMessage",
             "chat_id": clean_chat_id,
-            "text": reply_text
+            "text": formatted_reply,
+            "parse_mode": "HTML"
         })
         
     except Exception as e:

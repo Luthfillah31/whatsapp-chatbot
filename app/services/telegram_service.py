@@ -2,12 +2,28 @@ import logging
 import httpx
 import asyncio
 import json
+import re
 import urllib.request
 from typing import Optional, List, Dict, Any
 from app.config import settings
 from app.models.schemas import IncomingChatMessage
 
 logger = logging.getLogger(__name__)
+
+
+def format_text_for_telegram(text: str) -> str:
+    """Converts standard LLM Markdown syntax into valid Telegram HTML formatting."""
+    if not text:
+        return ""
+    # Replace markdown headers (# Header or ## Header) with <b>HEADER</b>
+    text = re.sub(r'^#{1,6}\s*(.+)$', lambda m: f"<b>{m.group(1).strip().upper()}</b>", text, flags=re.MULTILINE)
+    # Replace double asterisks **bold** with <b>bold</b>
+    text = re.sub(r'\*\*(.*?)\*\*', r'<b>\1</b>', text)
+    # Replace single asterisk *italic* with <i>italic</i> (only if not adjacent to another asterisk)
+    text = re.sub(r'(?<!\*)\*(?!\*)(.*?)(?<!\*)\*(?!\*)', r'<i>\1</i>', text)
+    # Replace double tildes ~~strike~~ with <s>strike</s>
+    text = re.sub(r'~~(.*?)~~', r'<s>\1</s>', text)
+    return text
 
 
 def parse_telegram_webhook(payload: Dict[str, Any]) -> List[IncomingChatMessage]:
@@ -75,7 +91,7 @@ def send_sync_telegram(url: str, data: dict) -> bool:
 
 async def send_telegram_message(chat_id: str, text: str) -> bool:
     """
-    Sends a text message reply via Telegram Bot API with IPv4 forcing and sync fallback.
+    Sends a text message reply via Telegram Bot API with HTML formatting, IPv4 forcing, and sync fallback.
     """
     token = get_clean_token()
     if not token:
@@ -84,14 +100,17 @@ async def send_telegram_message(chat_id: str, text: str) -> bool:
 
     # Remove 'tg_' prefix if present when sending back to Telegram API
     clean_chat_id = chat_id.replace("tg_", "") if chat_id.startswith("tg_") else chat_id
+    formatted_text = format_text_for_telegram(text)
 
     url = f"https://api.telegram.org/bot{token}/sendMessage"
     data = {
         "chat_id": clean_chat_id,
-        "text": text
+        "text": formatted_text,
+        "parse_mode": "HTML"
     }
 
     # Attempt 1: httpx with forced IPv4 (local_address="0.0.0.0") and retries
+
     try:
         transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
         async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
