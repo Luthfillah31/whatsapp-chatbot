@@ -1,6 +1,7 @@
 import logging
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException, Request, BackgroundTasks, status
+from fastapi.responses import JSONResponse
 from sqlalchemy.orm import Session
 from app.models.db_models import get_db, SessionLocal
 from app.models.schemas import IncomingChatMessage
@@ -144,21 +145,59 @@ async def receive_simulator_message(msg: IncomingChatMessage, db: Session = Depe
 
 
 @router.post("/telegram")
-async def receive_telegram_webhook(request: Request, background_tasks: BackgroundTasks):
+async def receive_telegram_webhook(request: Request):
     """
-    Receives incoming Telegram chat messages from Telegram Bot API webhook.
-    Returns 200 OK immediately and processes via OpenRouter in background.
+    Receives incoming Telegram messages and replies using Telegram's 
+    'Reply via Webhook Response' feature.
+    
+    Instead of making a separate outbound HTTP call to api.telegram.org/sendMessage,
+    we process the message synchronously and return the reply payload directly
+    in the webhook response body. Telegram reads this response and delivers it
+    as a sendMessage call automatically.
+    
+    This completely bypasses any outbound network restrictions on the hosting container.
+    Telegram allows up to 60 seconds for webhook responses.
     """
     try:
         payload = await request.json()
         incoming_msgs = telegram_service.parse_telegram_webhook(payload)
-        for msg in incoming_msgs:
-            logger.info(f"Received Telegram message from {msg.sender_name} ({msg.sender_phone}): {msg.message_text}")
-            background_tasks.add_task(process_and_reply_telegram, msg)
-    except Exception as e:
-        logger.error(f"Error receiving Telegram webhook: {e}", exc_info=True)
         
-    return {"status": "ok"}
+        if not incoming_msgs:
+            # No text message to process (could be a status update, photo, etc.)
+            return {"status": "ok"}
+        
+        # Process the first message synchronously
+        msg = incoming_msgs[0]
+        logger.info(f"Received Telegram message from {msg.sender_name} ({msg.sender_phone}): {msg.message_text}")
+        
+        db = SessionLocal()
+        try:
+            reply_text = llm_service.process_chat_message(
+                db=db,
+                phone_number=msg.sender_phone,
+                sender_name=msg.sender_name,
+                message_text=msg.message_text
+            )
+        finally:
+            db.close()
+        
+        # Extract clean chat_id (remove 'tg_' prefix)
+        clean_chat_id = msg.sender_phone.replace("tg_", "") if msg.sender_phone.startswith("tg_") else msg.sender_phone
+        
+        logger.info(f"Replying to Telegram chat {clean_chat_id} via webhook response (no outbound HTTP needed).")
+        
+        # Return the reply using Telegram's "Reply via Webhook Response" feature.
+        # By including "method": "sendMessage" in the JSON response body,
+        # Telegram will automatically deliver this as a sendMessage API call.
+        return JSONResponse(content={
+            "method": "sendMessage",
+            "chat_id": clean_chat_id,
+            "text": reply_text
+        })
+        
+    except Exception as e:
+        logger.error(f"Error processing Telegram webhook: {e}", exc_info=True)
+        return {"status": "ok"}
 
 
 @router.get("/telegram/setup")
@@ -169,4 +208,5 @@ async def setup_telegram_webhook(url: str = Query(..., description="Full webhook
     """
     result = await telegram_service.register_telegram_webhook(url)
     return result
+
 
