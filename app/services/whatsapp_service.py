@@ -120,34 +120,97 @@ def format_text_for_whatsapp(text: str) -> str:
     return text
 
 
-def _send_meta_sync(url: str, headers: dict, data: dict) -> bool:
-    """Synchronous fallback using urllib to bypass async network issues in cloud containers."""
+def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -> bool:
+    """
+    Ultimate fallback: raw IPv4 socket with explicit DNS resolution.
+    Bypasses ALL HTTP libraries. Forces IPv4 DNS, raw TCP + TLS with SNI.
+    """
+    import socket
+    import ssl
+
+    # Step 1: Force IPv4 DNS resolution
     try:
-        req = urllib.request.Request(
-            url,
-            data=json.dumps(data).encode("utf-8"),
-            headers=headers,
-            method="POST"
-        )
-        with urllib.request.urlopen(req, timeout=20.0) as resp:
-            if resp.status == 200:
-                logger.info("Meta WhatsApp message sent via sync urllib fallback.")
-                return True
-            else:
-                logger.error(f"Meta sync fallback error ({resp.status}): {resp.read().decode()}")
+        addrs = socket.getaddrinfo(host, 443, socket.AF_INET, socket.SOCK_STREAM)
+        if not addrs:
+            logger.error(f"No IPv4 addresses found for {host}")
+            return False
+        ip = addrs[0][4][0]
+        logger.info(f"Resolved {host} to IPv4: {ip}")
     except Exception as e:
-        logger.error(f"Meta sync urllib fallback failed: {e}", exc_info=True)
-    return False
+        logger.error(f"IPv4 DNS resolution failed for {host}: {e}")
+        return False
+
+    # Step 2: Raw TCP connection to IPv4 address
+    try:
+        sock = socket.create_connection((ip, 443), timeout=15)
+    except Exception as e:
+        logger.error(f"TCP connection to {ip}:443 failed: {e}")
+        return False
+
+    # Step 3: SSL/TLS handshake with correct hostname for SNI + cert verification
+    ssock = None
+    try:
+        context = ssl.create_default_context()
+        ssock = context.wrap_socket(sock, server_hostname=host)
+        logger.info(f"SSL handshake to {host} ({ip}) succeeded!")
+    except Exception as e:
+        logger.error(f"SSL handshake to {host} ({ip}) failed: {e}")
+        sock.close()
+        return False
+
+    # Step 4: Send raw HTTP/1.1 request
+    try:
+        body = json.dumps(data).encode("utf-8")
+        request_line = f"POST {path} HTTP/1.1\r\n"
+        header_str = f"Host: {host}\r\n"
+        for k, v in headers.items():
+            header_str += f"{k}: {v}\r\n"
+        header_str += f"Content-Length: {len(body)}\r\n"
+        header_str += "Connection: close\r\n\r\n"
+
+        ssock.sendall((request_line + header_str).encode("utf-8") + body)
+
+        # Read response
+        response = b""
+        while True:
+            chunk = ssock.recv(4096)
+            if not chunk:
+                break
+            response += chunk
+        ssock.close()
+
+        # Parse HTTP status from first line
+        first_line = response.split(b"\r\n")[0].decode()
+        status_code = int(first_line.split(" ")[1])
+        body_start = response.find(b"\r\n\r\n") + 4
+        resp_body = response[body_start:].decode(errors="replace")
+
+        if status_code == 200:
+            logger.info(f"Meta message sent via raw IPv4 socket! Response: {resp_body[:200]}")
+            return True
+        else:
+            logger.error(f"Meta raw socket error ({status_code}): {resp_body[:500]}")
+            return False
+    except Exception as e:
+        logger.error(f"Raw socket send failed: {e}", exc_info=True)
+        if ssock:
+            try:
+                ssock.close()
+            except Exception:
+                pass
+        return False
 
 
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
-    """Sends a text message reply via Meta WhatsApp Cloud API with IPv4 forcing and sync fallback."""
+    """Sends a text message reply via Meta WhatsApp Cloud API with multi-stage fallback."""
     formatted_text = format_text_for_whatsapp(text)
     if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
         return False
 
-    url = f"https://graph.facebook.com/v18.0/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    host = "graph.facebook.com"
+    path = f"/v18.0/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
+    url = f"https://{host}{path}"
     headers = {
         "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -159,22 +222,26 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         "text": {"body": formatted_text}
     }
 
-    # Attempt 1: httpx with forced IPv4 and retries
+    # Attempt 1: httpx with forced IPv4 binding and retries
     try:
         transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
-        async with httpx.AsyncClient(transport=transport, timeout=20.0) as client:
+        async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
             resp = await client.post(url, headers=headers, json=data)
             if resp.status_code == 200:
-                logger.info(f"Message sent successfully to {phone_number} via Meta Cloud API (httpx).")
+                logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
                 return True
             else:
                 logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
                 return False
     except Exception as e:
-        logger.warning(f"httpx Meta outbound failed ({e}), switching to sync urllib fallback...")
+        logger.warning(f"httpx Meta outbound failed ({e}), trying raw IPv4 socket...")
 
-    # Attempt 2: Synchronous urllib fallback in thread pool
-    return await asyncio.to_thread(_send_meta_sync, url, headers, data)
+    # Attempt 2: Raw IPv4 socket (bypasses all HTTP libraries)
+    result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
+    if result:
+        return True
+
+    logger.error("All outbound methods to graph.facebook.com failed.")
 
 
 async def send_evolution_message(phone_number: str, text: str) -> bool:
