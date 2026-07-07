@@ -30,6 +30,9 @@ class Settings(BaseSettings):
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = ""
     WHATSAPP_VERIFY_TOKEN: str = "my_secret_verify_token_123"
 
+    # Telegram Bot API (Optional / Multi-Platform)
+    TELEGRAM_BOT_TOKEN: Optional[str] = ""
+
     # Evolution API / Baileys Wrapper (Optional)
     EVOLUTION_API_URL: Optional[str] = ""
     EVOLUTION_API_KEY: Optional[str] = ""

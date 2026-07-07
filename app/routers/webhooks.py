@@ -4,11 +4,28 @@ from fastapi import APIRouter, Depends, Query, HTTPException, Request, Backgroun
 from sqlalchemy.orm import Session
 from app.models.db_models import get_db, SessionLocal
 from app.models.schemas import IncomingChatMessage
-from app.services import whatsapp_service, llm_service
+from app.services import whatsapp_service, llm_service, telegram_service
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/webhook", tags=["Webhooks"])
+
+
+async def process_and_reply_telegram(msg: IncomingChatMessage):
+    """Background worker to run OpenRouter LLM loop and send reply via Telegram Bot API."""
+    db = SessionLocal()
+    try:
+        reply_text = llm_service.process_chat_message(
+            db=db,
+            phone_number=msg.sender_phone,
+            sender_name=msg.sender_name,
+            message_text=msg.message_text
+        )
+        await telegram_service.send_telegram_message(msg.sender_phone, reply_text)
+    except Exception as e:
+        logger.error(f"Error processing Telegram message in background: {e}", exc_info=True)
+    finally:
+        db.close()
 
 
 async def process_and_reply_meta(msg: IncomingChatMessage):
@@ -124,3 +141,32 @@ async def receive_simulator_message(msg: IncomingChatMessage, db: Session = Depe
     except Exception as e:
         logger.error(f"Simulator error: {e}", exc_info=True)
         raise HTTPException(status_code=500, detail=str(e))
+
+
+@router.post("/telegram")
+async def receive_telegram_webhook(request: Request, background_tasks: BackgroundTasks):
+    """
+    Receives incoming Telegram chat messages from Telegram Bot API webhook.
+    Returns 200 OK immediately and processes via OpenRouter in background.
+    """
+    try:
+        payload = await request.json()
+        incoming_msgs = telegram_service.parse_telegram_webhook(payload)
+        for msg in incoming_msgs:
+            logger.info(f"Received Telegram message from {msg.sender_name} ({msg.sender_phone}): {msg.message_text}")
+            background_tasks.add_task(process_and_reply_telegram, msg)
+    except Exception as e:
+        logger.error(f"Error receiving Telegram webhook: {e}", exc_info=True)
+        
+    return {"status": "ok"}
+
+
+@router.get("/telegram/setup")
+async def setup_telegram_webhook(url: str = Query(..., description="Full webhook URL, e.g. https://my-space.hf.space/webhook/telegram")):
+    """
+    Helper endpoint to easily register this server as the Telegram Bot Webhook.
+    Example: GET /webhook/telegram/setup?url=https://luthfillah-whatsapp-chatbot-api.hf.space/webhook/telegram
+    """
+    result = await telegram_service.register_telegram_webhook(url)
+    return result
+

@@ -19,8 +19,9 @@ A production-ready, AI-powered WhatsApp chatbot built with **Python (FastAPI)**,
 - **📅 Dual Scheduling Engine**:
   - **Local SQL Database (SQLite / Supabase / PostgreSQL)**: Works out of the box with zero configuration needed.
   - **Google Calendar Sync**: Easily connect Google Calendar API to automatically create and sync live reservations for **Tennis Court 1** and **Tennis Court 2**.
-- **💬 Webhook Gateways**:
+- **💬 Multi-Platform Webhook Gateways**:
   - Native **Meta WhatsApp Cloud API** verification and message processing.
+  - Native **Telegram Bot API** support (Free & Instant setup via `@BotFather`).
   - Compatible with open-source WhatsApp wrappers (**Evolution API / Baileys**).
 - **🖥️ Built-in Interactive Web Simulator & Schedule Dashboard**:
   - Test the chatbot in real-time directly from your browser without needing a WhatsApp Business account or phone setup!
