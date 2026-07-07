@@ -94,6 +94,21 @@ st.markdown("""
         overflow: hidden;
         box-shadow: 0 4px 15px rgba(0, 0, 0, 0.1);
     }
+    
+    /* Date Input Box Enlargement */
+    div[data-testid="stDateInput"] div[data-baseweb="input"] {
+        min-height: 56px !important;
+        font-size: 1.35rem !important;
+        border-radius: 12px !important;
+        border: 2px solid #10b981 !important;
+        background-color: rgba(16, 185, 129, 0.1) !important;
+        padding-left: 12px !important;
+    }
+    div[data-testid="stDateInput"] input {
+        font-size: 1.35rem !important;
+        font-weight: 700 !important;
+        color: #10b981 !important;
+    }
 </style>
 """, unsafe_allow_html=True)
 
@@ -109,15 +124,17 @@ st.markdown("""
 ctrl_col1, ctrl_col2 = st.columns([1, 1])
 
 with ctrl_col1:
+    st.markdown("### 📅 Pilih Tanggal Operasional:")
     selected_date = st.date_input(
         "📅 Pilih Tanggal Operasional",
         value=datetime.date.today(),
+        label_visibility="collapsed",
         help="Pilih tanggal untuk memuat jadwal ketersediaan lapangan real-time dari database."
     )
     date_str = selected_date.strftime("%Y-%m-%d")
 
 with ctrl_col2:
-    st.markdown("#### ℹ️ Info Operasional Lapangan")
+    st.markdown("### ℹ️ Info Operasional Lapangan:")
     st.write(f"**Jam Operasional**: {settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB setiap hari")
 
 st.markdown("---")
