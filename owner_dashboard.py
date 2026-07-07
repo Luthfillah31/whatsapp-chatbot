@@ -186,28 +186,24 @@ with col3:
 st.markdown("<br>", unsafe_allow_html=True)
 
 # Schedule Table Section
-st.subheader(f"📋 Jadwal Rinci & Kontak Pemesan - {selected_date.strftime('%d %B %Y')}")
+st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
 table_rows = []
 for s in slots:
     # Format Court 1 info
     c1_status = "🟢 Tersedia" if s.court_1_status == "Available" else "🔴 Terpesan"
     c1_name = s.court_1_customer if s.court_1_status == "Booked" and s.court_1_customer else "-"
-    c1_phone = s.court_1_phone if s.court_1_status == "Booked" and s.court_1_phone else "-"
     
     # Format Court 2 info
     c2_status = "🟢 Tersedia" if s.court_2_status == "Available" else "🔴 Terpesan"
     c2_name = s.court_2_customer if s.court_2_status == "Booked" and s.court_2_customer else "-"
-    c2_phone = s.court_2_phone if s.court_2_status == "Booked" and s.court_2_phone else "-"
     
     table_rows.append({
         "⏰ Slot Waktu": s.time,
         f"🎾 {settings.COURT_1_NAME}": c1_status,
-        "👤 Pemesan Lap. 1": c1_name,
-        "📱 Kontak Lap. 1": c1_phone,
+        "👤 Nama Pemesan Lap. 1": c1_name,
         f"🎾 {settings.COURT_2_NAME}": c2_status,
-        "👤 Pemesan Lap. 2": c2_name,
-        "📱 Kontak Lap. 2": c2_phone
+        "👤 Nama Pemesan Lap. 2": c2_name
     })
 
 df_schedule = pd.DataFrame(table_rows)
