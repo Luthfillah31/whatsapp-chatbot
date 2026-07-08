@@ -142,12 +142,13 @@ def get_system_prompt(sender_phone: str) -> str:
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     return f"""Anda adalah Asisten AI Resmi untuk Reservasi Lapangan Tenis Komplek Perumahan. Tugas utama Anda adalah melayani warga komplek dengan sangat ramah, sopan, natural, dan berorientasi penuh pada kepuasan pelanggan (Customer Oriented).
 
-===== ATURAN #1: WAJIB AKURAT 100% — ANTI-HALUSINASI (PRIORITAS TERTINGGI!) =====
-- Setiap kali warga bertanya tentang jadwal, reservasi, atau ketersediaan lapangan, Anda WAJIB memanggil tool yang sesuai (list_my_bookings, check_court_availability, dll). JANGAN PERNAH menjawab berdasarkan riwayat percakapan sebelumnya atau ingatan Anda sendiri!
-- Data dari tool adalah SATU-SATUNYA sumber kebenaran. Riwayat chat BUKAN sumber data!
+===== ATURAN #1: KEPATUHAN TERHADAP DATA DATABASE (PRIORITAS TERTINGGI!) =====
+- Sumber kebenaran UTAMA dan SATU-SATUNYA untuk data jadwal, reservasi, dan ketersediaan lapangan adalah HASIL TOOL (yang mengambil langsung dari database).
+- Riwayat percakapan (chat history) HANYA berfungsi sebagai pengingat konteks percakapan (misalnya: siapa yang sedang diajak bicara, apa topik yang dibahas). Riwayat percakapan BUKAN sumber data jadwal!
+- Setiap kali warga bertanya tentang jadwal, reservasi, atau ketersediaan lapangan, Anda WAJIB memanggil tool yang sesuai (list_my_bookings, check_court_availability, dll) untuk mendapatkan data terkini dari database.
 - DILARANG KERAS menambahkan, mengarang, atau melanjutkan urutan jam yang TIDAK ADA di dalam hasil tool!
-- Jika tool mengembalikan 3 jadwal, sebutkan TEPAT 3 jadwal. Jika tool mengembalikan 1 jadwal, sebutkan TEPAT 1. Jangan pernah mengarang jadwal atau jam tambahan!
-- Perhatikan field "total_bookings_found" di hasil tool. Angka ini adalah jumlah PASTI reservasi. Gunakan angka ini, JANGAN menghitung sendiri atau mengarang!
+- Jika hasil tool mengembalikan 3 jadwal, sebutkan TEPAT 3 jadwal. Jangan pernah mengarang jadwal tambahan!
+- Perhatikan field "total_bookings_found" di hasil tool. Angka ini adalah jumlah PASTI dari database. Patuhi angka ini!
 
 ===== ATURAN #2: GAYA BAHASA & ANTI-JARGON =====
 1. CUSTOMER ORIENTED: Selalu bersikap membantu, hangat, sopan, dan solutif. Sapa warga dengan "Pak/Bu".
@@ -312,10 +313,10 @@ def process_chat_message(
     db.add(user_msg_db)
     db.commit()
 
-    # 2. Retrieve recent history (last 6 messages for conversational context)
+    # 2. Retrieve recent history (last 20 messages as conversational context)
     history_records = db.query(ChatHistory).filter(
         ChatHistory.phone_number == phone_number
-    ).order_by(ChatHistory.timestamp.desc()).limit(6).all()
+    ).order_by(ChatHistory.timestamp.desc()).limit(20).all()
     history_records.reverse()
 
     messages: List[Any] = [{"role": "system", "content": get_system_prompt(phone_number)}]
@@ -323,13 +324,12 @@ def process_chat_message(
         if rec.role in ["user", "assistant"]:
             messages.append({"role": rec.role, "content": rec.content})
 
-    # Inject a data-accuracy reminder before the current message
-    # This prevents the model from parroting stale/hallucinated data from chat history
+    # Inject a reminder that chat history is context only, DB is the authority
     messages.append({
         "role": "system",
-        "content": "PENGINGAT PENTING: Data jadwal/reservasi di riwayat percakapan di atas MUNGKIN SUDAH TIDAK AKURAT. "
-                   "Jika warga bertanya soal jadwal atau reservasi, Anda WAJIB memanggil tool (list_my_bookings / check_court_availability) "
-                   "untuk mendapatkan data terbaru. JANGAN menyalin jawaban dari riwayat percakapan!"
+        "content": "PENGINGAT: Riwayat percakapan di atas hanya sebagai konteks percakapan. "
+                   "Untuk pertanyaan soal jadwal atau reservasi, Anda WAJIB memanggil tool untuk mengambil data terkini dari database. "
+                   "Hasil tool adalah satu-satunya sumber kebenaran — sampaikan APA ADANYA tanpa menambah atau mengarang."
     })
 
     # Ensure current message is in the list if not already retrieved
