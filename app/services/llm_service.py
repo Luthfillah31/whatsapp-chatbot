@@ -189,8 +189,8 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
     """Strips sensitive fields from booking data before sending to LLM.
     
     This prevents the LLM from seeing customer_phone or other PII
-    that could be leaked in its response, while allowing registered_name
-    when 2-factor verification succeeds.
+    that could be leaked in its response. customer_name is included
+    so the bot can correctly identify bookings made under different names.
     """
     sanitized = []
     for b in bookings:
@@ -200,6 +200,7 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
             "date": b.get("date"),
             "start_time": b.get("start_time"),
             "end_time": b.get("end_time"),
+            "customer_name": b.get("customer_name"),
             "status": b.get("status"),
         }
         if "registered_name" in b:

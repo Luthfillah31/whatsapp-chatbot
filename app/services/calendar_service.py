@@ -65,6 +65,45 @@ def check_court_availability(
     Checks if Court 1 and/or Court 2 are available on the specified date and time slot.
     Queries the local SQL database as the primary source of truth, and verifies against Google Calendar if configured.
     """
+    # Validate: reject past dates entirely
+    today = datetime.date.today()
+    try:
+        booking_date = datetime.date.fromisoformat(date)
+    except (ValueError, TypeError):
+        return CourtAvailabilityResponse(
+            date=date,
+            time_slot=time_slot,
+            court_1_available=False,
+            court_2_available=False,
+            summary_text=f"Format tanggal '{date}' tidak valid. Gunakan format YYYY-MM-DD."
+        )
+
+    if booking_date < today:
+        return CourtAvailabilityResponse(
+            date=date,
+            time_slot=time_slot,
+            court_1_available=False,
+            court_2_available=False,
+            summary_text=f"Mohon maaf, tanggal {date} sudah lewat. Silakan pilih tanggal hari ini atau yang akan datang."
+        )
+
+    # Validate: reject past time slots for today
+    try:
+        req_h = int(time_slot.split(":")[0])
+        req_m = int(time_slot.split(":")[1]) if ":" in time_slot else 0
+        if booking_date == today:
+            now = datetime.datetime.now()
+            if req_h < now.hour or (req_h == now.hour and req_m <= now.minute):
+                return CourtAvailabilityResponse(
+                    date=date,
+                    time_slot=time_slot,
+                    court_1_available=False,
+                    court_2_available=False,
+                    summary_text=f"Mohon maaf, jam {time_slot} sudah lewat untuk hari ini. Silakan pilih jam yang lebih sore."
+                )
+    except (ValueError, IndexError):
+        pass
+
     # Validate operating hours
     try:
         start_h = int(settings.CLUB_OPENING_HOUR.split(":")[0])
@@ -313,6 +352,7 @@ def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = No
             "date": b.booking_date,
             "start_time": b.start_time,
             "end_time": b.end_time,
+            "customer_name": b.customer_name,
             "status": b.status
         })
     return results
