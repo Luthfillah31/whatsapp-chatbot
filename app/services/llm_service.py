@@ -101,10 +101,15 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "list_my_bookings",
-            "description": "List all confirmed upcoming reservations for the active customer.",
+            "description": "List all confirmed upcoming reservations for the active customer. You can optionally filter by a specific date.",
             "parameters": {
                 "type": "object",
-                "properties": {}
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "Optional date to filter reservations in YYYY-MM-DD format. If omitted, returns all upcoming reservations."
+                    }
+                }
             }
         }
     },
@@ -143,8 +148,11 @@ def get_system_prompt(sender_phone: str) -> str:
    - JANGAN PERNAH menyebutkan atau menampilkan kata-kata sistem teknis seperti: `tool`, `fungsi`, `parameter`, `database`, `backend`, `sistem verifikasi`, `eksekusi`, `JSON`, `query`, atau `API`.
    - JANGAN PERNAH menjelaskan cara kerja internal AI, pemograman, atau aturan keamanan kepada warga.
    - Jika mengecek jadwal atau memesan, langsung sampaikan hasilnya dengan natural kepada warga (Contoh SALAH: "Fungsi check_court_availability mengembalikan status available". Contoh BENAR: "Baik Pak/Bu, Lapangan 1 besok jam 16:00 masih kosong dan siap dibooking 🎾").
-3. SINGKAT, PADAT, & JELAS: Hindari kalimat panjang yang bertele-tele. Langsung berikan informasi yang dibutuhkan: Hari, Tanggal, Jam, Nama Lapangan, dan Status Booking.
-4. HINDARI PENGULANGAN: Jangan mengulang salam pembuka atau aturan fasilitas yang sama jika percakapan sudah berlangsung.
+3. WAJIB AKURAT 100% & ANTI-HALUSINASI (STRICT GROUND TRUTH):
+   - Saat menyampaikan hasil dari tool (seperti cek jadwal atau daftar reservasi), Anda WAJIB menyampaikan data APA ADANYA sesuai hasil tool. DILARANG KERAS menambahkan, mengarang, atau melanjutkan urutan jam yang tidak ada di dalam data tool!
+   - Jika hasil tool mengembalikan 3 jadwal, sebutkan tepat 3 jadwal! Jangan pernah mengarang jadwal atau jam tambahan!
+4. SINGKAT, PADAT, & JELAS: Hindari kalimat panjang yang bertele-tele. Langsung berikan informasi yang dibutuhkan: Hari, Tanggal, Jam, Nama Lapangan, dan Status Booking.
+5. HINDARI PENGULANGAN: Jangan mengulang salam pembuka atau aturan fasilitas yang sama jika percakapan sudah berlangsung.
 
 INFORMASI PENTING KOMPLEK PERUMAHAN:
 - Tanggal Hari Ini: {today_str}
@@ -237,23 +245,31 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
     elif tool_name == "list_my_bookings":
         res = calendar_service.get_user_bookings(
             db=db,
-            customer_phone=default_phone  # Enforced sender phone
+            customer_phone=default_phone,  # Enforced sender phone
+            date=arguments.get("date")
         )
         safe_bookings = _sanitize_bookings_for_llm(res)
-        return {"bookings": safe_bookings, "count": len(safe_bookings)}
+        return {
+            "count": len(safe_bookings),
+            "total_bookings_found": len(safe_bookings),
+            "bookings": safe_bookings,
+            "message": f"Ditemukan tepat {len(safe_bookings)} jadwal reservasi terdaftar pada akun ini."
+        }
 
     elif tool_name == "find_booking_by_verification":
         res = calendar_service.get_user_bookings_by_verification(
             db=db,
             customer_phone=str(arguments.get("customer_phone", "")).strip(),
-            customer_name=str(arguments.get("customer_name", "")).strip()
+            customer_name=str(arguments.get("customer_name", "")).strip(),
+            date=arguments.get("date")
         )
         safe_bookings = _sanitize_bookings_for_llm(res)
         return {
-            "bookings": safe_bookings,
             "count": len(safe_bookings),
+            "total_bookings_found": len(safe_bookings),
+            "bookings": safe_bookings,
             "verification_status": "success" if safe_bookings else "not_found",
-            "message": "Hasil pencarian berdasarkan verifikasi 2 variabel (Nomor HP + Nama Lengkap)."
+            "message": f"Ditemukan tepat {len(safe_bookings)} jadwal reservasi berdasarkan verifikasi 2 variabel."
         }
 
     else:

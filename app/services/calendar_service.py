@@ -287,18 +287,22 @@ def cancel_booking(db: Session, booking_id: int, customer_phone: str, customer_n
     }
 
 
-def get_user_bookings(db: Session, customer_phone: str) -> List[Dict[str, Any]]:
+def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
     """Returns all confirmed upcoming bookings for a specific customer phone number.
     
-    Only returns bookings where the date is today or in the future.
-    Past bookings are excluded to keep results relevant.
+    Optionally filters by a specific date. If omitted, returns bookings from today onwards.
     """
     today_str = datetime.date.today().strftime("%Y-%m-%d")
-    bookings = db.query(Booking).filter(
+    query = db.query(Booking).filter(
         Booking.customer_phone == customer_phone,
-        Booking.status == "confirmed",
-        Booking.booking_date >= today_str
-    ).order_by(Booking.booking_date, Booking.start_time).all()
+        Booking.status == "confirmed"
+    )
+    if date and str(date).strip():
+        query = query.filter(Booking.booking_date == str(date).strip())
+    else:
+        query = query.filter(Booking.booking_date >= today_str)
+
+    bookings = query.order_by(Booking.booking_date, Booking.start_time).all()
 
     results = []
     for b in bookings:
@@ -314,17 +318,22 @@ def get_user_bookings(db: Session, customer_phone: str) -> List[Dict[str, Any]]:
     return results
 
 
-def get_user_bookings_by_verification(db: Session, customer_phone: str, customer_name: str) -> List[Dict[str, Any]]:
+def get_user_bookings_by_verification(db: Session, customer_phone: str, customer_name: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
     """Returns upcoming bookings matching BOTH phone number and customer name (2-Factor Verification).
     
     SECURITY: Both parameters must match (case-insensitive name match) to prevent unauthorized inspection.
     """
     today_str = datetime.date.today().strftime("%Y-%m-%d")
-    bookings = db.query(Booking).filter(
+    query = db.query(Booking).filter(
         Booking.customer_phone == customer_phone,
-        Booking.status == "confirmed",
-        Booking.booking_date >= today_str
-    ).order_by(Booking.booking_date, Booking.start_time).all()
+        Booking.status == "confirmed"
+    )
+    if date and str(date).strip():
+        query = query.filter(Booking.booking_date == str(date).strip())
+    else:
+        query = query.filter(Booking.booking_date >= today_str)
+
+    bookings = query.order_by(Booking.booking_date, Booking.start_time).all()
 
     # Case-insensitive check in python
     matched = [
