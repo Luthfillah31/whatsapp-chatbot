@@ -329,5 +329,6 @@ html_table += """
 """
 
 # Render premium custom HTML table
-st.markdown(html_table, unsafe_allow_html=True)
+# We strip newlines and carriage returns to prevent Markdown from interpreting indented HTML as preformatted code blocks.
+st.markdown(html_table.replace("\n", "").replace("\r", "").strip(), unsafe_allow_html=True)
 
