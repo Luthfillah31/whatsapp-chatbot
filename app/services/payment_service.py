@@ -24,8 +24,8 @@ def create_midtrans_transaction(
     server_key = settings.MIDTRANS_SERVER_KEY.strip()
     if not server_key or server_key.lower().startswith("your_") or server_key == "test_key":
         logger.info(f"Midtrans Server Key not configured. Using local mock payment gateway for {order_id}.")
-        # Use local mock payment URL (the port/host will be resolved relative to base url in the frontend)
-        mock_url = f"/payments/mock?order_id={order_id}&gross_amount={amount}&name={customer_name}"
+        base_url = settings.BASE_URL.rstrip("/")
+        mock_url = f"{base_url}/payments/mock?order_id={order_id}&gross_amount={amount}&name={customer_name}"
         return {
             "token": f"mock-token-{booking_id}",
             "redirect_url": mock_url
@@ -70,14 +70,16 @@ def create_midtrans_transaction(
         else:
             logger.error(f"Midtrans returned error code {response.status_code}: {response.text}")
             # Fallback to mock on error to maintain system availability
-            mock_url = f"/payments/mock?order_id={order_id}&gross_amount={amount}&name={customer_name}"
+            base_url = settings.BASE_URL.rstrip("/")
+            mock_url = f"{base_url}/payments/mock?order_id={order_id}&gross_amount={amount}&name={customer_name}"
             return {
                 "token": f"mock-token-fallback-{booking_id}",
                 "redirect_url": mock_url
             }
     except Exception as e:
         logger.error(f"Failed to connect to Midtrans Sandbox: {e}")
-        mock_url = f"/payments/mock?order_id={order_id}&gross_amount={amount}&name={customer_name}"
+        base_url = settings.BASE_URL.rstrip("/")
+        mock_url = f"{base_url}/payments/mock?order_id={order_id}&gross_amount={amount}&name={customer_name}"
         return {
             "token": f"mock-token-fallback-{booking_id}",
             "redirect_url": mock_url

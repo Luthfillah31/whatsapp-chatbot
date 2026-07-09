@@ -21,6 +21,7 @@ class Settings(BaseSettings):
     # Midtrans Sandbox Configuration
     MIDTRANS_SERVER_KEY: str = ""
     MIDTRANS_CLIENT_KEY: str = ""
+    BASE_URL: str = "http://localhost:8000"
 
     # Database
     DATABASE_URL: str = "sqlite:///./tennis_courts.db"
