@@ -58,6 +58,7 @@ def test_payment_confirmation(test_db):
     )
     
     # Confirm payment
+    assert res.booking_id is not None
     success = calendar_service.confirm_payment(test_db, res.booking_id)
     assert success is True
     
@@ -133,6 +134,7 @@ def test_webhook_receipt_delivery(test_db):
     client = TestClient(app)
     
     # We patch the send_payment_receipt helper
+    assert res.booking_id is not None
     with patch("app.routers.payment_notification.send_payment_receipt") as mock_send_receipt:
         payload = {
             "order_id": f"booking-{res.booking_id}",
