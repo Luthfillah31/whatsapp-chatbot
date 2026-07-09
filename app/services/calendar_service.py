@@ -262,9 +262,13 @@ def create_booking(
     )
 
     # Update payment link in DB
-    new_booking.payment_url = payment_info.get("redirect_url")
-    new_booking.payment_token = payment_info.get("token")
+    redirect_url = payment_info.get("redirect_url")
+    token = payment_info.get("token")
+    new_booking.payment_url = redirect_url if redirect_url is not None else ""
+    new_booking.payment_token = token if token is not None else ""
     db.commit()
+
+    p_url = str(new_booking.payment_url) if new_booking.payment_url else None
 
     return BookingResponse(
         success=True,
@@ -275,9 +279,9 @@ def create_booking(
         start_time=time_slot,
         end_time=end_time,
         status="pending_payment",
-        payment_url=new_booking.payment_url,
+        payment_url=p_url,
         payment_status="pending",
-        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {settings.HOURLY_RATE_IDR:,} melalui link ini untuk konfirmasi: {new_booking.payment_url}. Batas waktu pembayaran 10 menit."
+        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {settings.HOURLY_RATE_IDR:,} melalui link ini untuk konfirmasi: {p_url}. Batas waktu pembayaran 10 menit."
     )
 
 
@@ -351,8 +355,8 @@ def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = No
         Booking.customer_phone == customer_phone,
         Booking.status.in_(["confirmed", "pending_payment"])
     )
-    if date and str(date).strip():
-        query = query.filter(Booking.booking_date == str(date).strip())
+    if date and date.strip():
+        query = query.filter(Booking.booking_date == date.strip())
     else:
         query = query.filter(Booking.booking_date >= today_str)
 
@@ -383,8 +387,8 @@ def get_user_bookings_by_verification(db: Session, customer_phone: str, customer
         Booking.customer_phone == customer_phone,
         Booking.status.in_(["confirmed", "pending_payment"])
     )
-    if date and str(date).strip():
-        query = query.filter(Booking.booking_date == str(date).strip())
+    if date and date.strip():
+        query = query.filter(Booking.booking_date == date.strip())
     else:
         query = query.filter(Booking.booking_date >= today_str)
 

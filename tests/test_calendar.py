@@ -88,6 +88,7 @@ def test_daily_schedule_grid(test_db):
         customer_name="David",
         customer_phone="444"
     )
+    assert res.booking_id is not None
     calendar_service.confirm_payment(test_db, res.booking_id)
     
     grid = calendar_service.get_daily_schedule(test_db, "2026-09-01")

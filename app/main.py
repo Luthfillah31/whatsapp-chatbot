@@ -13,11 +13,22 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
+from contextlib import asynccontextmanager
+
+# Initialize database on startup via modern lifespan
+@asynccontextmanager
+async def lifespan(app: FastAPI):
+    logger.info("Initializing database tables...")
+    init_db()
+    logger.info("Database initialized successfully!")
+    yield
+
 # Initialize FastAPI app
 app = FastAPI(
     title="🎾 Sistem Reservasi Lapangan Tenis Warga - Komplek Perumahan",
     description="Production-grade AI chatbot powered by OpenRouter for residential complex tennis court reservations via Telegram & WhatsApp.",
-    version="1.0.0"
+    version="1.0.0",
+    lifespan=lifespan
 )
 
 # Enable CORS
@@ -28,13 +39,6 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
-# Initialize database on startup
-@app.on_event("startup")
-def on_startup():
-    logger.info("Initializing database tables...")
-    init_db()
-    logger.info("Database initialized successfully!")
 
 # Mount static directory for UI assets
 static_dir = os.path.join(os.path.dirname(__file__), "static")
