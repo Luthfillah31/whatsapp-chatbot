@@ -264,8 +264,8 @@ def create_booking(
     # Update payment link in DB
     redirect_url = payment_info.get("redirect_url")
     token = payment_info.get("token")
-    new_booking.payment_url = redirect_url if redirect_url is not None else ""
-    new_booking.payment_token = token if token is not None else ""
+    new_booking.payment_url = cast(Any, redirect_url if redirect_url is not None else "")
+    new_booking.payment_token = cast(Any, token if token is not None else "")
     db.commit()
 
     p_url = str(new_booking.payment_url) if new_booking.payment_url else None
