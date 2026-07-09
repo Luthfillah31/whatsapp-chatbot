@@ -1,16 +1,41 @@
 import logging
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, status, BackgroundTasks
 from sqlalchemy.orm import Session
 from app.models.db_models import get_db, Booking
-from app.services import calendar_service, payment_service
+from app.services import calendar_service, payment_service, telegram_service, whatsapp_service
+from app.config import settings
 
 logger = logging.getLogger(__name__)
 
 router = APIRouter(prefix="/api/payments", tags=["Payments & Webhooks"])
 
 
+async def send_payment_receipt(phone_number: str, receipt_text: str):
+    """Sends the payment receipt to the customer based on contact channel."""
+    try:
+        if phone_number.startswith("tg_"):
+            logger.info(f"Sending Telegram receipt to chat {phone_number}")
+            await telegram_service.send_telegram_message(phone_number, receipt_text)
+        elif phone_number == "simulator":
+            logger.info(f"Simulator payment receipt:\n{receipt_text}")
+        else:
+            logger.info(f"Sending WhatsApp receipt to {phone_number}")
+            if settings.WHATSAPP_TOKEN and settings.WHATSAPP_PHONE_NUMBER_ID:
+                await whatsapp_service.send_meta_whatsapp_message(phone_number, receipt_text)
+            elif settings.EVOLUTION_API_URL and settings.EVOLUTION_API_KEY:
+                await whatsapp_service.send_evolution_message(phone_number, receipt_text)
+            else:
+                logger.warning(f"No WhatsApp messaging service configured. Cannot send receipt to {phone_number}.")
+    except Exception as e:
+        logger.error(f"Failed to send receipt to {phone_number}: {e}", exc_info=True)
+
+
 @router.post("/midtrans-webhook")
-def handle_midtrans_notification(payload: dict, db: Session = Depends(get_db)):
+def handle_midtrans_notification(
+    payload: dict,
+    background_tasks: BackgroundTasks,
+    db: Session = Depends(get_db)
+):
     """
     HTTP POST Webhook notification endpoint for Midtrans.
     Receives real-time payment updates and confirms or releases reservations.
@@ -65,6 +90,26 @@ def handle_midtrans_notification(payload: dict, db: Session = Depends(get_db)):
                 status_code=status.HTTP_400_BAD_REQUEST,
                 detail="Booking not found or not pending payment."
             )
+        
+        # Send receipt/confirmation to customer
+        booking = db.query(Booking).filter(Booking.id == booking_id).first()
+        if booking:
+            receipt_text = (
+                f"🧾 *KUITANSI PEMBAYARAN RESMI* 🧾\n\n"
+                f"Reservasi Anda telah dikonfirmasi!\n"
+                f"-----------------------------------\n"
+                f"ID Booking: #{booking.id}\n"
+                f"Nama: {booking.customer_name}\n"
+                f"Lapangan: {'Tennis Court 1' if booking.court_id == 1 else 'Tennis Court 2'}\n"
+                f"Tanggal: {booking.booking_date}\n"
+                f"Jam: {booking.start_time} - {booking.end_time} WIB\n"
+                f"Biaya: Rp {settings.HOURLY_RATE_IDR:,}\n"
+                f"Status: *LUNAS* (Diterima oleh Midtrans)\n"
+                f"-----------------------------------\n"
+                f"Selamat bermain! 🎾🏡"
+            )
+            background_tasks.add_task(send_payment_receipt, booking.customer_phone, receipt_text)
+
     elif transaction_status in ["expire", "cancel", "deny"]:
         # Find booking and release slot
         booking = db.query(Booking).filter(Booking.id == booking_id).first()
