@@ -80,7 +80,7 @@ def test_cancellation_flow(test_db):
 
 def test_daily_schedule_grid(test_db):
     """Test generating hourly grid for the web dashboard."""
-    calendar_service.create_booking(
+    res = calendar_service.create_booking(
         db=test_db,
         court_id=1,
         date="2026-09-01",
@@ -88,6 +88,7 @@ def test_daily_schedule_grid(test_db):
         customer_name="David",
         customer_phone="444"
     )
+    calendar_service.confirm_payment(test_db, res.booking_id)
     
     grid = calendar_service.get_daily_schedule(test_db, "2026-09-01")
     assert grid.date == "2026-09-01"

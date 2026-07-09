@@ -14,6 +14,15 @@ def serve_dashboard():
     return FileResponse(static_file)
 
 
+@router.get("/payments/mock")
+def serve_mock_payment():
+    """Serves the mock Midtrans checkout simulation page."""
+    static_file = os.path.join(os.path.dirname(__file__), "..", "static", "mock_payment.html")
+    if not os.path.exists(static_file):
+        raise HTTPException(status_code=404, detail="Mock payment page not found.")
+    return FileResponse(static_file)
+
+
 @router.get("/privacy")
 def serve_privacy_policy():
     """Serves the Privacy Policy required for Meta WhatsApp App verification and publishing."""

@@ -11,6 +11,7 @@ from app.models.schemas import (
     ScheduleSlot,
     DailyScheduleResponse
 )
+from app.services import payment_service
 
 logger = logging.getLogger(__name__)
 
@@ -121,14 +122,29 @@ def check_court_availability(
     except Exception:
         pass
 
-    # Query local database for confirmed bookings at this date and time
-    existing_bookings = db.query(Booking).filter(
+    # Query local database for confirmed and pending bookings at this date and time
+    all_bookings = db.query(Booking).filter(
         Booking.booking_date == date,
         Booking.start_time == time_slot,
-        Booking.status == "confirmed"
+        Booking.status.in_(["confirmed", "pending_payment"])
     ).all()
 
-    booked_court_ids = {b.court_id for b in existing_bookings}
+    booked_court_ids = set()
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    for b in all_bookings:
+        if b.status == "confirmed":
+            booked_court_ids.add(b.court_id)
+        elif b.status == "pending_payment":
+            created_utc = b.created_at
+            if created_utc.tzinfo is None:
+                created_utc = created_utc.replace(tzinfo=datetime.timezone.utc)
+            if now_utc - created_utc < datetime.timedelta(minutes=10):
+                booked_court_ids.add(b.court_id)
+            else:
+                # Release/expire booking
+                b.status = "cancelled"
+                b.payment_status = "expired"
+                db.commit()
 
     # Check Google Calendar if configured
     g_service = get_google_calendar_service()
@@ -219,25 +235,8 @@ def create_booking(
         )
 
     end_time = calculate_end_time(time_slot)
-    google_event_id = None
 
-    # Sync to Google Calendar if configured
-    g_service = get_google_calendar_service()
-    cal_id = settings.GOOGLE_CALENDAR_ID_COURT_1 if court_id == 1 else settings.GOOGLE_CALENDAR_ID_COURT_2
-    if g_service and cal_id:
-        try:
-            event_body = {
-                'summary': f"🎾 {court_name} - {customer_name}",
-                'description': f"Reserved via WhatsApp Bot.\nCustomer: {customer_name}\nPhone: {customer_phone}",
-                'start': {'dateTime': f"{date}T{time_slot}:00", 'timeZone': 'UTC'},
-                'end': {'dateTime': f"{date}T{end_time}:00", 'timeZone': 'UTC'},
-            }
-            created_event = cast(Any, g_service).events().insert(calendarId=cal_id, body=event_body).execute()
-            google_event_id = created_event.get('id')
-        except Exception as e:
-            logger.error(f"Failed to insert event into Google Calendar: {e}")
-
-    # Create database record
+    # Create database record in pending_payment status (Do not sync with Google Calendar yet)
     new_booking = Booking(
         court_id=court_id,
         customer_phone=customer_phone,
@@ -245,14 +244,28 @@ def create_booking(
         booking_date=date,
         start_time=time_slot,
         end_time=end_time,
-        status="confirmed",
-        google_event_id=google_event_id
+        status="pending_payment",
+        payment_status="pending",
+        google_event_id=None
     )
     db.add(new_booking)
     db.commit()
     db.refresh(new_booking)
 
+    # Generate payment transaction details
     bid = cast(int, new_booking.id)
+    payment_info = payment_service.create_midtrans_transaction(
+        booking_id=bid,
+        amount=settings.HOURLY_RATE_IDR,
+        customer_name=customer_name,
+        customer_phone=customer_phone
+    )
+
+    # Update payment link in DB
+    new_booking.payment_url = payment_info.get("redirect_url")
+    new_booking.payment_token = payment_info.get("token")
+    db.commit()
+
     return BookingResponse(
         success=True,
         booking_id=bid,
@@ -261,8 +274,10 @@ def create_booking(
         date=date,
         start_time=time_slot,
         end_time=end_time,
-        status="confirmed",
-        message=f"🎉 Reservation confirmed! {court_name} is booked for {customer_name} on {date} from {time_slot} to {end_time}. Booking ID: #{bid}."
+        status="pending_payment",
+        payment_url=new_booking.payment_url,
+        payment_status="pending",
+        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {settings.HOURLY_RATE_IDR:,} melalui link ini untuk konfirmasi: {new_booking.payment_url}. Batas waktu pembayaran 10 menit."
     )
 
 
@@ -276,14 +291,14 @@ def cancel_booking(db: Session, booking_id: int, customer_phone: str, customer_n
     booking = db.query(Booking).filter(
         Booking.id == booking_id,
         Booking.customer_phone == customer_phone,
-        Booking.status == "confirmed"
+        Booking.status.in_(["confirmed", "pending_payment"])
     ).first()
 
     # If not found by direct phone match, check 2-factor verification (name match)
     if not booking and customer_name:
         candidate = db.query(Booking).filter(
             Booking.id == booking_id,
-            Booking.status == "confirmed"
+            Booking.status.in_(["confirmed", "pending_payment"])
         ).first()
         if candidate and candidate.customer_name.strip().lower() == customer_name.strip().lower():
             booking = candidate
@@ -293,7 +308,7 @@ def cancel_booking(db: Session, booking_id: int, customer_phone: str, customer_n
         # Check if the booking exists under a different phone (for security logging only)
         other_booking = db.query(Booking).filter(
             Booking.id == booking_id,
-            Booking.status == "confirmed"
+            Booking.status.in_(["confirmed", "pending_payment"])
         ).first()
         if other_booking and other_booking.customer_phone != customer_phone:
             logger.warning(
@@ -334,7 +349,7 @@ def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = No
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     query = db.query(Booking).filter(
         Booking.customer_phone == customer_phone,
-        Booking.status == "confirmed"
+        Booking.status.in_(["confirmed", "pending_payment"])
     )
     if date and str(date).strip():
         query = query.filter(Booking.booking_date == str(date).strip())
@@ -366,7 +381,7 @@ def get_user_bookings_by_verification(db: Session, customer_phone: str, customer
     today_str = datetime.date.today().strftime("%Y-%m-%d")
     query = db.query(Booking).filter(
         Booking.customer_phone == customer_phone,
-        Booking.status == "confirmed"
+        Booking.status.in_(["confirmed", "pending_payment"])
     )
     if date and str(date).strip():
         query = query.filter(Booking.booking_date == str(date).strip())
@@ -402,10 +417,26 @@ def get_daily_schedule(db: Session, date: str) -> DailyScheduleResponse:
     start_h = int(settings.CLUB_OPENING_HOUR.split(":")[0])
     end_h = int(settings.CLUB_CLOSING_HOUR.split(":")[0])
 
-    bookings = db.query(Booking).filter(
+    all_bookings = db.query(Booking).filter(
         Booking.booking_date == date,
-        Booking.status == "confirmed"
+        Booking.status.in_(["confirmed", "pending_payment"])
     ).all()
+
+    bookings = []
+    now_utc = datetime.datetime.now(datetime.timezone.utc)
+    for b in all_bookings:
+        if b.status == "confirmed":
+            bookings.append(b)
+        elif b.status == "pending_payment":
+            created_utc = b.created_at
+            if created_utc.tzinfo is None:
+                created_utc = created_utc.replace(tzinfo=datetime.timezone.utc)
+            if now_utc - created_utc < datetime.timedelta(minutes=10):
+                bookings.append(b)
+            else:
+                b.status = "cancelled"
+                b.payment_status = "expired"
+                db.commit()
 
     c1_map = {}
     c2_map = {}
@@ -421,16 +452,63 @@ def get_daily_schedule(db: Session, date: str) -> DailyScheduleResponse:
         b1 = c1_map.get(time_str)
         b2 = c2_map.get(time_str)
 
+        # Status text "Booked" or "Pending Payment" or "Available"
+        status_1 = "Available"
+        if b1:
+            status_1 = "Booked" if b1.status == "confirmed" else "Pending Payment"
+            
+        status_2 = "Available"
+        if b2:
+            status_2 = "Booked" if b2.status == "confirmed" else "Pending Payment"
+
         slots.append(ScheduleSlot(
             time=time_str,
-            court_1_status="Booked" if b1 else "Available",
+            court_1_status=status_1,
             court_1_booking_id=b1.id if b1 else None,
             court_1_customer=b1.customer_name if b1 else None,
             court_1_phone=b1.customer_phone if b1 else None,
-            court_2_status="Booked" if b2 else "Available",
+            court_2_status=status_2,
             court_2_booking_id=b2.id if b2 else None,
             court_2_customer=b2.customer_name if b2 else None,
             court_2_phone=b2.customer_phone if b2 else None,
         ))
 
     return DailyScheduleResponse(date=date, slots=slots)
+
+
+def confirm_payment(db: Session, booking_id: int) -> bool:
+    """
+    Confirms a booking's payment status, updates status to 'confirmed',
+    and synchronizes it with Google Calendar.
+    """
+    booking = db.query(Booking).filter(
+        Booking.id == booking_id,
+        Booking.status == "pending_payment"
+    ).first()
+    if not booking:
+        logger.warning(f"Booking #{booking_id} not found or not pending payment.")
+        return False
+        
+    booking.status = "confirmed"
+    booking.payment_status = "paid"
+    
+    # Sync to Google Calendar
+    g_service = get_google_calendar_service()
+    court_name = settings.COURT_1_NAME if booking.court_id == 1 else settings.COURT_2_NAME
+    cal_id = settings.GOOGLE_CALENDAR_ID_COURT_1 if booking.court_id == 1 else settings.GOOGLE_CALENDAR_ID_COURT_2
+    if g_service and cal_id:
+        try:
+            event_body = {
+                'summary': f"🎾 {court_name} - {booking.customer_name}",
+                'description': f"Reserved via WhatsApp Bot.\nCustomer: {booking.customer_name}\nPhone: {booking.customer_phone}\nPayment Status: Paid",
+                'start': {'dateTime': f"{booking.booking_date}T{booking.start_time}:00", 'timeZone': 'UTC'},
+                'end': {'dateTime': f"{booking.booking_date}T{booking.end_time}:00", 'timeZone': 'UTC'},
+            }
+            created_event = cast(Any, g_service).events().insert(calendarId=cal_id, body=event_body).execute()
+            booking.google_event_id = created_event.get('id')
+        except Exception as e:
+            logger.error(f"Failed to insert event into Google Calendar: {e}")
+            
+    db.commit()
+    logger.info(f"Payment confirmed for Booking #{booking_id}")
+    return True

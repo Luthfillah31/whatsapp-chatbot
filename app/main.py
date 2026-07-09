@@ -4,7 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from app.models.db_models import init_db
-from app.routers import web, api, webhooks
+from app.routers import web, api, webhooks, payment_notification
 
 # Configure logging
 logging.basicConfig(
@@ -45,6 +45,7 @@ if os.path.exists(static_dir):
 app.include_router(web.router)
 app.include_router(api.router)
 app.include_router(webhooks.router)
+app.include_router(payment_notification.router)
 
 
 @app.get("/health")

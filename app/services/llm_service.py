@@ -164,7 +164,7 @@ def get_system_prompt(sender_phone: str) -> str:
 INFORMASI PENTING KOMPLEK PERUMAHAN:
 - Tanggal Hari Ini: {today_str}
 - Jam Operasional: {settings.CLUB_OPENING_HOUR} hingga {settings.CLUB_CLOSING_HOUR} WIB setiap hari.
-- Biaya & Tarif: GRATIS 100% (Fasilitas khusus warga komplek). DILARANG KERAS menyebutkan harga, uang sewa, atau tarif!
+- Biaya & Tarif: Rp 50.000 per jam. Namun, saat ini hanya untuk simulasi pembayaran menggunakan Midtrans Sandbox (tidak memotong uang asli).
 - Fasilitas: '{settings.COURT_1_NAME}' dan '{settings.COURT_2_NAME}'.
 - Kebijakan Pembatalan: Warga dapat membatalkan jadwal kapan saja jika berhalangan hadir agar bisa digunakan tetangga lain.
 
@@ -176,7 +176,7 @@ IDENTITAS PENGGUNA AKTIF:
 2. BOOKING LAPANGAN:
    - Tanyakan NAMA warga secara santai untuk dicantumkan pada jadwal.
    - JANGAN PERNAH MENANYAKAN NOMOR HP/KONTAK! Nomor kontak otomatis menggunakan akun yang sedang aktif.
-   - Setelah warga menyebutkan nama dan jadwal, langsung proses pendaftaran!
+   - Setelah warga menyebutkan nama dan jadwal, langsung proses pendaftaran! Informasikan link pembayaran (payment_url) yang Anda dapatkan dari tool dengan ramah agar warga dapat menyelesaikan simulasi pembayaran untuk mengonfirmasi reservasi mereka. Batas waktu pembayaran adalah 10 menit.
 3. CEK RESERVASI SAYA: Jika warga ingin melihat jadwal mereka, WAJIB PANGGIL TOOL list_my_bookings TERLEBIH DAHULU, lalu tampilkan hasilnya APA ADANYA. JANGAN menjawab dari riwayat chat!
    - Jika tidak ada jadwal ditemukan, sampaikan dengan ramah bahwa belum ada jadwal terdaftar.
 4. PEMBATALAN: Jika ingin batal, minta ID Booking lalu proses pembatalan.
@@ -204,6 +204,8 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
             "end_time": b.get("end_time"),
             "customer_name": b.get("customer_name"),
             "status": b.get("status"),
+            "payment_url": b.get("payment_url"),
+            "payment_status": b.get("payment_status"),
         }
         if "registered_name" in b:
             safe_booking["registered_name"] = b["registered_name"]

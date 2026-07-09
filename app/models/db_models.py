@@ -16,8 +16,11 @@ class Booking(Base):
     booking_date = Column(String, nullable=False, index=True)  # YYYY-MM-DD
     start_time = Column(String, nullable=False)  # HH:MM
     end_time = Column(String, nullable=False)    # HH:MM
-    status = Column(String, default="confirmed")  # "confirmed" or "cancelled"
+    status = Column(String, default="pending_payment")  # "pending_payment", "confirmed", "cancelled"
     google_event_id = Column(String, nullable=True) # ID from Google Calendar API
+    payment_status = Column(String, default="pending")  # "pending", "paid", "expired", "failed"
+    payment_url = Column(String, nullable=True)
+    payment_token = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
 
 
@@ -41,8 +44,38 @@ SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
 
 
 def init_db():
-    """Create all database tables if they do not exist."""
+    """Create all database tables if they do not exist and apply migrations."""
     Base.metadata.create_all(bind=engine)
+    
+    # Run auto-migrations to add payment columns if they do not exist
+    if db_url.startswith("sqlite"):
+        import sqlite3
+        db_path = db_url.replace("sqlite:///", "")
+        try:
+            conn = sqlite3.connect(db_path)
+            cursor = conn.cursor()
+            cursor.execute("PRAGMA table_info(bookings)")
+            columns = [row[1] for row in cursor.fetchall()]
+            if "payment_status" not in columns:
+                cursor.execute("ALTER TABLE bookings ADD COLUMN payment_status VARCHAR DEFAULT 'pending'")
+            if "payment_url" not in columns:
+                cursor.execute("ALTER TABLE bookings ADD COLUMN payment_url VARCHAR")
+            if "payment_token" not in columns:
+                cursor.execute("ALTER TABLE bookings ADD COLUMN payment_token VARCHAR")
+            conn.commit()
+            conn.close()
+        except Exception as e:
+            print(f"SQLite Auto-Migration failed: {e}")
+    elif db_url.startswith("postgresql") or db_url.startswith("postgres"):
+        try:
+            from sqlalchemy import text
+            with engine.connect() as conn:
+                conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR DEFAULT 'pending'"))
+                conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_url VARCHAR"))
+                conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_token VARCHAR"))
+                conn.commit()
+        except Exception as e:
+            print(f"Postgres Auto-Migration failed: {e}")
 
 
 def get_db():

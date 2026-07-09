@@ -150,8 +150,8 @@ slots = schedule_data.slots
 
 # Calculate Owner KPI Metrics
 total_slots = len(slots) * 2
-booked_c1 = sum(1 for s in slots if s.court_1_status == "Booked")
-booked_c2 = sum(1 for s in slots if s.court_2_status == "Booked")
+booked_c1 = sum(1 for s in slots if s.court_1_status != "Available")
+booked_c2 = sum(1 for s in slots if s.court_2_status != "Available")
 total_booked = booked_c1 + booked_c2
 total_avail = total_slots - total_booked
 occupancy_rate = (total_booked / total_slots * 100) if total_slots > 0 else 0.0
@@ -191,12 +191,26 @@ st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B
 table_rows = []
 for s in slots:
     # Format Court 1 info
-    c1_status = "🟢 Tersedia" if s.court_1_status == "Available" else "🔴 Terpesan"
-    c1_name = s.court_1_customer if s.court_1_status == "Booked" and s.court_1_customer else "-"
+    if s.court_1_status == "Available":
+        c1_status = "🟢 Tersedia"
+        c1_name = "-"
+    elif s.court_1_status == "Pending Payment":
+        c1_status = "🟡 Menunggu Pembayaran"
+        c1_name = s.court_1_customer if s.court_1_customer else "-"
+    else:
+        c1_status = "🔴 Terpesan"
+        c1_name = s.court_1_customer if s.court_1_customer else "-"
     
     # Format Court 2 info
-    c2_status = "🟢 Tersedia" if s.court_2_status == "Available" else "🔴 Terpesan"
-    c2_name = s.court_2_customer if s.court_2_status == "Booked" and s.court_2_customer else "-"
+    if s.court_2_status == "Available":
+        c2_status = "🟢 Tersedia"
+        c2_name = "-"
+    elif s.court_2_status == "Pending Payment":
+        c2_status = "🟡 Menunggu Pembayaran"
+        c2_name = s.court_2_customer if s.court_2_customer else "-"
+    else:
+        c2_status = "🔴 Terpesan"
+        c2_name = s.court_2_customer if s.court_2_customer else "-"
     
     table_rows.append({
         "⏰ Slot Waktu": s.time,

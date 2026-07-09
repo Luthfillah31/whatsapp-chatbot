@@ -1,0 +1,193 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Midtrans Sandbox - Mock Payment Simulation</title>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&display=swap" rel="stylesheet">
+    <style>
+        :root {
+            --bg-color: #0b0f19;
+            --card-bg: rgba(22, 28, 45, 0.7);
+            --accent-color: #3b82f6;
+            --success-color: #10b981;
+            --text-color: #f3f4f6;
+            --text-secondary: #9ca3af;
+            --border-color: rgba(255, 255, 255, 0.08);
+        }
+        body {
+            font-family: 'Inter', sans-serif;
+            background: radial-gradient(circle at top left, #0b0f19, #1e1b4b);
+            color: var(--text-color);
+            min-height: 100vh;
+            margin: 0;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 20px;
+        }
+        .card {
+            background: var(--card-bg);
+            backdrop-filter: blur(16px);
+            border: 1px solid var(--border-color);
+            border-radius: 20px;
+            width: 100%;
+            max-width: 450px;
+            padding: 40px;
+            box-shadow: 0 20px 40px rgba(0, 0, 0, 0.5);
+            transition: all 0.3s ease;
+        }
+        h2 {
+            font-size: 24px;
+            font-weight: 600;
+            margin-top: 0;
+            margin-bottom: 8px;
+            background: linear-gradient(135deg, #60a5fa, #3b82f6);
+            -webkit-background-clip: text;
+            -webkit-text-fill-color: transparent;
+        }
+        .subtitle {
+            color: var(--text-secondary);
+            font-size: 14px;
+            margin-bottom: 24px;
+        }
+        .item-row {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 12px;
+            font-size: 14px;
+        }
+        .item-label {
+            color: var(--text-secondary);
+        }
+        .item-value {
+            font-weight: 500;
+        }
+        .divider {
+            height: 1px;
+            background: var(--border-color);
+            margin: 20px 0;
+        }
+        .total-row {
+            display: flex;
+            justify-content: space-between;
+            font-size: 18px;
+            font-weight: 700;
+            margin-bottom: 30px;
+        }
+        .btn-pay {
+            background: linear-gradient(135deg, #3b82f6, #2563eb);
+            color: white;
+            border: none;
+            border-radius: 12px;
+            padding: 16px;
+            font-size: 16px;
+            font-weight: 600;
+            width: 100%;
+            cursor: pointer;
+            transition: all 0.2s ease;
+            box-shadow: 0 4px 12px rgba(59, 130, 246, 0.3);
+        }
+        .btn-pay:hover {
+            transform: translateY(-2px);
+            box-shadow: 0 6px 20px rgba(59, 130, 246, 0.4);
+        }
+        .success-state {
+            display: none;
+            text-align: center;
+        }
+        .success-icon {
+            font-size: 64px;
+            color: var(--success-color);
+            margin-bottom: 20px;
+        }
+        .success-title {
+            font-size: 22px;
+            font-weight: 700;
+            margin-bottom: 10px;
+        }
+        .success-desc {
+            color: var(--text-secondary);
+            font-size: 14px;
+            line-height: 1.5;
+        }
+    </style>
+</head>
+<body>
+    <div class="card" id="payment-card">
+        <h2>Simulasi Pembayaran</h2>
+        <p class="subtitle">Midtrans Sandbox Simulation Mode</p>
+        
+        <div class="item-row">
+            <span class="item-label">Order ID</span>
+            <span class="item-value" id="order-id-label">booking-18</span>
+        </div>
+        <div class="item-row">
+            <span class="item-label">Deskripsi</span>
+            <span class="item-value">Reservasi Lapangan Tenis Warga</span>
+        </div>
+        
+        <div class="divider"></div>
+        
+        <div class="total-row">
+            <span>Total Bayar</span>
+            <span id="total-amount-label">Rp 50.000</span>
+        </div>
+        
+        <button class="btn-pay" id="btn-submit" onclick="processPayment()">Bayar Sekarang (Simulasi)</button>
+    </div>
+
+    <div class="card success-state" id="success-card">
+        <div class="success-icon">✓</div>
+        <div class="success-title">Pembayaran Berhasil!</div>
+        <p class="success-desc">Status booking Anda telah terkonfirmasi dan sinkron secara real-time di sistem. Anda dapat menutup halaman ini sekarang.</p>
+    </div>
+
+    <script>
+        const urlParams = new URLSearchParams(window.location.search);
+        const orderId = urlParams.get('order_id') || 'booking-0';
+        const grossAmount = urlParams.get('gross_amount') || '50000';
+        
+        document.getElementById('order-id-label').innerText = orderId;
+        document.getElementById('total-amount-label').innerText = 'Rp ' + parseInt(grossAmount).toLocaleString('id-ID');
+
+        async function processPayment() {
+            const btn = document.getElementById('btn-submit');
+            btn.innerText = 'Memproses...';
+            btn.disabled = true;
+
+            const webhookPayload = {
+                order_id: orderId,
+                transaction_status: 'settlement',
+                gross_amount: parseFloat(grossAmount).toFixed(2),
+                status_code: '200',
+                signature_key: 'mock-signature'
+            };
+
+            try {
+                const response = await fetch('/api/payments/midtrans-webhook', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify(webhookPayload)
+                });
+                
+                if (response.ok) {
+                    document.getElementById('payment-card').style.display = 'none';
+                    document.getElementById('success-card').style.display = 'block';
+                } else {
+                    alert('Gagal memproses pembayaran simulasi. Silakan coba lagi.');
+                    btn.innerText = 'Bayar Sekarang (Simulasi)';
+                    btn.disabled = false;
+                }
+            } catch (err) {
+                console.error(err);
+                alert('Terjadi kesalahan jaringan.');
+                btn.innerText = 'Bayar Sekarang (Simulasi)';
+                btn.disabled = false;
+            }
+        }
+    </script>
+</body>
+</html>

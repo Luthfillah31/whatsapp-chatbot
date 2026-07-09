@@ -16,6 +16,11 @@ class Settings(BaseSettings):
     CLUB_OPENING_HOUR: str = "05:00"
     CLUB_CLOSING_HOUR: str = "23:00"
     HOURLY_RATE_USD: int = 0
+    HOURLY_RATE_IDR: int = 50000
+
+    # Midtrans Sandbox Configuration
+    MIDTRANS_SERVER_KEY: str = ""
+    MIDTRANS_CLIENT_KEY: str = ""
 
     # Database
     DATABASE_URL: str = "sqlite:///./tennis_courts.db"
