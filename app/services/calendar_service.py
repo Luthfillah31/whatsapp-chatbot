@@ -3,6 +3,7 @@ import datetime
 import logging
 from typing import Optional, List, Dict, Any, cast
 from sqlalchemy.orm import Session
+from sqlalchemy.exc import IntegrityError
 from app.config import settings
 from app.models.db_models import Booking
 from app.models.schemas import (
@@ -249,8 +250,21 @@ def create_booking(
         google_event_id=None
     )
     db.add(new_booking)
-    db.commit()
-    db.refresh(new_booking)
+    try:
+        db.commit()
+        db.refresh(new_booking)
+    except IntegrityError:
+        db.rollback()
+        return BookingResponse(
+            success=False,
+            court_id=court_id,
+            court_name=court_name,
+            date=date,
+            start_time=time_slot,
+            end_time=end_time,
+            status="failed",
+            message=f"Mohon maaf, {court_name} pada tanggal {date} jam {time_slot} baru saja diproses atau sudah dibooking oleh warga lain. Silakan pilih waktu/lapangan lain."
+        )
 
     # Generate payment transaction details
     bid = cast(int, new_booking.id)

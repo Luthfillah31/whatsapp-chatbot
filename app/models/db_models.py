@@ -1,5 +1,5 @@
 import datetime
-from sqlalchemy import Column, Integer, String, DateTime, create_engine
+from sqlalchemy import Column, Integer, String, DateTime, create_engine, Index
 from sqlalchemy.orm import declarative_base, sessionmaker, Session
 from app.config import settings
 
@@ -22,6 +22,16 @@ class Booking(Base):
     payment_url = Column(String, nullable=True)
     payment_token = Column(String, nullable=True)
     created_at = Column(DateTime, default=lambda: datetime.datetime.now(datetime.timezone.utc))
+
+    __table_args__ = (
+        Index(
+            'idx_unique_active_booking',
+            'court_id', 'booking_date', 'start_time',
+            unique=True,
+            sqlite_where=(status.in_(["confirmed", "pending_payment"])),
+            postgresql_where=(status.in_(["confirmed", "pending_payment"]))
+        ),
+    )
 
 
 class ChatHistory(Base):
@@ -62,6 +72,10 @@ def init_db():
                 cursor.execute("ALTER TABLE bookings ADD COLUMN payment_url VARCHAR")
             if "payment_token" not in columns:
                 cursor.execute("ALTER TABLE bookings ADD COLUMN payment_token VARCHAR")
+            
+            # Create partial unique index to prevent duplicate concurrent active bookings
+            cursor.execute("CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_booking ON bookings (court_id, booking_date, start_time) WHERE status IN ('confirmed', 'pending_payment')")
+            
             conn.commit()
             conn.close()
         except Exception as e:
@@ -73,6 +87,7 @@ def init_db():
                 conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_status VARCHAR DEFAULT 'pending'"))
                 conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_url VARCHAR"))
                 conn.execute(text("ALTER TABLE bookings ADD COLUMN IF NOT EXISTS payment_token VARCHAR"))
+                conn.execute(text("CREATE UNIQUE INDEX IF NOT EXISTS idx_unique_active_booking ON bookings (court_id, booking_date, start_time) WHERE status IN ('confirmed', 'pending_payment')"))
                 conn.commit()
         except Exception as e:
             print(f"Postgres Auto-Migration failed: {e}")
