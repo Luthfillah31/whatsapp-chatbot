@@ -109,7 +109,92 @@ st.markdown("""
         font-weight: 700 !important;
         color: #10b981 !important;
     }
+
+    /* Premium Custom HTML Table & Glassmorphic Badges */
+    .custom-table-container {
+        background: rgba(15, 23, 42, 0.6);
+        backdrop-filter: blur(16px);
+        border: 1px solid rgba(255, 255, 255, 0.08);
+        border-radius: 16px;
+        overflow: hidden;
+        margin-top: 1.5rem;
+        box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
+    }
+    .custom-table {
+        width: 100%;
+        border-collapse: collapse;
+        text-align: left;
+        color: #f3f4f6;
+    }
+    .custom-table th {
+        background: rgba(30, 41, 59, 0.9);
+        padding: 18px 24px;
+        font-weight: 600;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        letter-spacing: 1px;
+        color: #94a3b8;
+        border-bottom: 2px solid rgba(255, 255, 255, 0.05);
+    }
+    .custom-table td {
+        padding: 18px 24px;
+        font-size: 0.95rem;
+        border-bottom: 1px solid rgba(255, 255, 255, 0.05);
+        vertical-align: middle;
+    }
+    .custom-table tr:hover {
+        background: rgba(255, 255, 255, 0.02);
+    }
+    .custom-table tr:last-child td {
+        border-bottom: none;
+    }
+    .time-slot-badge {
+        font-family: 'Outfit', sans-serif;
+        font-weight: 700;
+        font-size: 1rem;
+        color: #60a5fa;
+        background: rgba(96, 165, 250, 0.1);
+        padding: 6px 12px;
+        border-radius: 8px;
+        border: 1px solid rgba(96, 165, 250, 0.2);
+        display: inline-block;
+    }
+    .status-badge {
+        display: inline-flex;
+        align-items: center;
+        font-weight: 700;
+        font-size: 0.75rem;
+        padding: 6px 14px;
+        border-radius: 20px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    .status-available {
+        background: rgba(16, 185, 129, 0.1);
+        color: #10b981;
+        border: 1px solid rgba(16, 185, 129, 0.2);
+    }
+    .status-pending {
+        background: rgba(245, 158, 11, 0.1);
+        color: #f59e0b;
+        border: 1px solid rgba(245, 158, 11, 0.2);
+        box-shadow: 0 0 10px rgba(245, 158, 11, 0.15);
+    }
+    .status-booked {
+        background: rgba(239, 68, 68, 0.1);
+        color: #ef4444;
+        border: 1px solid rgba(239, 68, 68, 0.2);
+    }
+    .customer-name-text {
+        font-weight: 600;
+        color: #f1f5f9;
+    }
+    .customer-empty-text {
+        color: #64748b;
+        font-style: italic;
+    }
 </style>
+
 """, unsafe_allow_html=True)
 
 # Header Section
@@ -188,45 +273,61 @@ st.markdown("<br>", unsafe_allow_html=True)
 # Schedule Table Section
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
-table_rows = []
+# Construct Custom HTML Table
+html_table = f"""
+<div class="custom-table-container">
+    <table class="custom-table">
+        <thead>
+            <tr>
+                <th style="width: 15%">⏰ Slot Waktu</th>
+                <th style="width: 20%">🎾 {settings.COURT_1_NAME}</th>
+                <th style="width: 25%">👤 Pemesan Lap. 1</th>
+                <th style="width: 20%">🎾 {settings.COURT_2_NAME}</th>
+                <th style="width: 25%">👤 Pemesan Lap. 2</th>
+            </tr>
+        </thead>
+        <tbody>
+"""
+
 for s in slots:
-    # Format Court 1 info
+    # Court 1 Status Badge
     if s.court_1_status == "Available":
-        c1_status = "🟢 Tersedia"
-        c1_name = "-"
+        c1_badge = '<span class="status-badge status-available">Tersedia</span>'
+        c1_name = '<span class="customer-empty-text">-</span>'
     elif s.court_1_status == "Pending Payment":
-        c1_status = "🟡 Menunggu Pembayaran"
-        c1_name = s.court_1_customer if s.court_1_customer else "-"
+        c1_badge = '<span class="status-badge status-pending">Pending</span>'
+        c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
     else:
-        c1_status = "🔴 Terpesan"
-        c1_name = s.court_1_customer if s.court_1_customer else "-"
-    
-    # Format Court 2 info
+        c1_badge = '<span class="status-badge status-booked">Terpesan</span>'
+        c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
+
+    # Court 2 Status Badge
     if s.court_2_status == "Available":
-        c2_status = "🟢 Tersedia"
-        c2_name = "-"
+        c2_badge = '<span class="status-badge status-available">Tersedia</span>'
+        c2_name = '<span class="customer-empty-text">-</span>'
     elif s.court_2_status == "Pending Payment":
-        c2_status = "🟡 Menunggu Pembayaran"
-        c2_name = s.court_2_customer if s.court_2_customer else "-"
+        c2_badge = '<span class="status-badge status-pending">Pending</span>'
+        c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
     else:
-        c2_status = "🔴 Terpesan"
-        c2_name = s.court_2_customer if s.court_2_customer else "-"
-    
-    table_rows.append({
-        "⏰ Slot Waktu": s.time,
-        f"🎾 {settings.COURT_1_NAME}": c1_status,
-        "👤 Nama Pemesan Lap. 1": c1_name,
-        f"🎾 {settings.COURT_2_NAME}": c2_status,
-        "👤 Nama Pemesan Lap. 2": c2_name
-    })
+        c2_badge = '<span class="status-badge status-booked">Terpesan</span>'
+        c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
 
-df_schedule = pd.DataFrame(table_rows)
+    html_table += f"""
+            <tr>
+                <td><span class="time-slot-badge">{s.time}</span></td>
+                <td>{c1_badge}</td>
+                <td>{c1_name}</td>
+                <td>{c2_badge}</td>
+                <td>{c2_name}</td>
+            </tr>
+    """
 
-# Display interactive dataframe with custom styling
-st.dataframe(
-    df_schedule,
-    width="stretch",
-    hide_index=True,
-    height=550
-)
+html_table += """
+        </tbody>
+    </table>
+</div>
+"""
+
+# Render premium custom HTML table
+st.markdown(html_table, unsafe_allow_html=True)
 
