@@ -69,10 +69,10 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     },
                     "customer_name": {
                         "type": "string",
-                        "description": "Full name of the customer booking the court."
+                        "description": "Optional name of the customer. Defaults to contact name if omitted."
                     }
                 },
-                "required": ["court_id", "date", "time_slot", "customer_name"]
+                "required": ["court_id", "date", "time_slot"]
             }
         }
     },
@@ -173,11 +173,14 @@ IDENTITAS PENGGUNA AKTIF:
 - ID Kontak warga saat ini: {sender_phone}
 
 ===== ALUR PELAYANAN RESERVASI WARGA =====
-1. CEK JADWAL KOSONG: Jika warga bertanya jadwal kosong, PANGGIL TOOL check_court_availability, lalu beritahu hasilnya.
+1. CEK JADWAL KOSONG: Jika warga hanya bertanya jadwal kosong atau menanyakan lapangan yang kosong (tanpa menyatakan ingin booking), PANGGIL TOOL check_court_availability, lalu beritahu hasilnya.
 2. BOOKING LAPANGAN:
-   - Tanyakan NAMA warga secara santai untuk dicantumkan pada jadwal.
+   - Jika warga secara eksplisit meminta untuk melakukan booking/reservasi (misalnya: "saya mau booking...", "tolong pesankan...", "booking jam 9..."), Anda WAJIB langsung memanggil tool 'book_court' tanpa melakukan cek ketersediaan terlebih dahulu dengan 'check_court_availability'.
+   - Jika nama warga sudah pernah disebutkan sebelumnya dalam riwayat percakapan (chat history), gunakan nama tersebut untuk parameter 'customer_name' dan langsung panggil tool 'book_court'.
+   - Jika nama warga belum pernah disebutkan, Anda wajib menanyakan nama warga secara santai untuk dicantumkan pada jadwal. Nama satu kata (misalnya: "Wira", "Junaedi") adalah nama yang valid dan harus langsung digunakan. Jangan pernah meminta nama lengkap atau nama belakang jika mereka hanya menyebutkan satu nama.
    - JANGAN PERNAH MENANYAKAN NOMOR HP/KONTAK! Nomor kontak otomatis menggunakan akun yang sedang aktif.
-   - Setelah warga menyebutkan nama dan jadwal, Anda WAJIB langsung memanggil tool 'book_court'! DILARANG KERAS hanya membalas dengan teks janji memproses tanpa memanggil tool. Anda harus mengeksekusi tool 'book_court' untuk mendaftarkan reservasi ke database dan mendapatkan link pembayaran (payment_url), lalu berikan detail reservasi beserta link pembayaran tersebut kepada warga. Batas waktu pembayaran adalah 10 menit.
+   - Panggilan tool 'book_court' harus dilakukan secara nyata. DILARANG KERAS hanya membalas dengan teks janji memproses tanpa memanggil tool. Anda harus mengeksekusi tool 'book_court' untuk mendaftarkan reservasi ke database dan mendapatkan link pembayaran (payment_url), lalu berikan detail reservasi beserta link pembayaran tersebut kepada warga. Batas waktu pembayaran adalah 10 menit.
+   - Jika warga menyebutkan jam tanpa keterangan pagi/malam (misalnya: "jam 9", "jam 8", "jam 7") dan waktu pagi hari tersebut sudah lewat, Anda WAJIB mengasumsikan waktu tersebut adalah sore/malam hari (misalnya: "jam 9" berarti "21:00", "jam 8" berarti "20:00", "jam 7" berarti "19:00").
 3. CEK RESERVASI SAYA: Jika warga ingin melihat jadwal mereka, WAJIB PANGGIL TOOL list_my_bookings TERLEBIH DAHULU, lalu tampilkan hasilnya APA ADANYA. JANGAN menjawab dari riwayat chat!
    - Jika tidak ada jadwal ditemukan, sampaikan dengan ramah bahwa belum ada jadwal terdaftar.
 4. PEMBATALAN: Jika ingin batal, minta ID Booking lalu proses pembatalan.
@@ -214,7 +217,7 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
     return sanitized
 
 
-def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], default_phone: str) -> Any:
+def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], default_phone: str, default_name: str = "Warga") -> Any:
     """Dispatches tool execution to the calendar service.
     
     SECURITY: Standard operations anchor to `default_phone` (derived from WhatsApp sender).
@@ -234,12 +237,16 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
         return res.model_dump()
 
     elif tool_name == "book_court":
+        c_name = arguments.get("customer_name")
+        if not c_name or not c_name.strip() or c_name.lower() in ["warga", "customer"]:
+            c_name = default_name
+
         res = calendar_service.create_booking(
             db=db,
             court_id=arguments["court_id"],
             date=arguments["date"],
             time_slot=arguments["time_slot"],
-            customer_name=arguments.get("customer_name", "Warga"),
+            customer_name=c_name,
             customer_phone=default_phone
         )
         return res.model_dump()
@@ -368,7 +375,7 @@ def process_chat_message(
                     fn_args = {}
 
                 # Execute function against local DB / Google Calendar
-                fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number)
+                fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
 
                 # Append tool execution result back to conversation
                 messages.append({
