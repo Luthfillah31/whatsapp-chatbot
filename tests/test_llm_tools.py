@@ -146,3 +146,14 @@ def test_execute_tool_call_2factor_verification(test_db):
     )
     assert verify_res_fail["verification_status"] == "not_found"
     assert verify_res_fail["count"] == 0
+
+
+def test_enforce_neutral_tone():
+    """Test enforce_neutral_tone strips non-neutral/religious expressions."""
+    from app.services.llm_service import enforce_neutral_tone
+    sample1 = "Alhamdulillah, untuk jam 22:00 malam ini, Lapangan 1 masih kosong."
+    assert enforce_neutral_tone(sample1) == "Untuk jam 22:00 malam ini, Lapangan 1 masih kosong."
+
+    sample2 = "Insya Allah jadwal Bapak sudah terdaftar."
+    assert enforce_neutral_tone(sample2) == "Jadwal Bapak sudah terdaftar."
+
