@@ -188,3 +188,23 @@ def test_reject_non_hourly_fractional_minutes(test_db):
     )
     assert book_res.success is False
     assert "bulat" in book_res.message.lower()
+
+
+def test_multi_hour_booking(test_db):
+    """Verify booking multiple consecutive hours (e.g. 06:00 to 10:00 = 4 hours)."""
+    book_res = calendar_service.create_booking(
+        db=test_db,
+        court_id=1,
+        date="2026-08-25",
+        time_slot="06:00",
+        customer_name="Daffa Multi",
+        customer_phone="0812345",
+        duration_hours=4
+    )
+    assert book_res.success is True
+    assert book_res.start_time == "06:00"
+    assert book_res.end_time == "10:00"
+
+    # Any overlapping hour in 06:00 - 10:00 (e.g. 07:00 or 08:00) should now be reported as booked
+    avail07 = calendar_service.check_court_availability(test_db, "2026-08-25", "07:00", court_id=1)
+    assert avail07.court_1_available is False

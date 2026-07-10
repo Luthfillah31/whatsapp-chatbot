@@ -153,10 +153,11 @@ def check_court_availability(
     except Exception:
         pass
 
-    # Query local database for confirmed and pending bookings at this date and time
+    # Query local database for confirmed and pending bookings that overlap this time slot
     all_bookings = db.query(Booking).filter(
         Booking.booking_date == date,
-        Booking.start_time == time_slot,
+        Booking.start_time <= time_slot,
+        Booking.end_time > time_slot,
         Booking.status.in_(["confirmed", "pending_payment"])
     ).all()
 
@@ -204,16 +205,17 @@ def check_court_availability(
     # If specific court was requested, adjust summary text
     day_name = get_indonesian_day_name(booking_date)
     rate = settings.HOURLY_RATE_IDR
+    cal_alert = f"[PENGINGAT KALENDER: Tanggal {date} adalah HARI {day_name.upper()}. Jika pengguna menyebut hari lain seperti Senin/Selasa, Anda WAJIB memberi tahu bahwa {date} adalah Hari {day_name}.]\n"
     if court_id == 1:
         status_text = f"tersedia (Rp {rate:,}/jam)" if c1_avail else "SUDAH TERISI"
-        summary = f"Hari {day_name}, {date} jam {time_slot}: {settings.COURT_1_NAME} {status_text}."
+        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_slot}: {settings.COURT_1_NAME} {status_text}."
     elif court_id == 2:
         status_text = f"tersedia (Rp {rate:,}/jam)" if c2_avail else "SUDAH TERISI"
-        summary = f"Hari {day_name}, {date} jam {time_slot}: {settings.COURT_2_NAME} {status_text}."
+        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_slot}: {settings.COURT_2_NAME} {status_text}."
     else:
         c1_str = f"Tersedia (Rp {rate:,}/jam)" if c1_avail else "Sudah Terisi"
         c2_str = f"Tersedia (Rp {rate:,}/jam)" if c2_avail else "Sudah Terisi"
-        summary = f"Hari {day_name}, {date} jam {time_slot}:\n- {settings.COURT_1_NAME}: {c1_str}\n- {settings.COURT_2_NAME}: {c2_str}"
+        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_slot}:\n- {settings.COURT_1_NAME}: {c1_str}\n- {settings.COURT_2_NAME}: {c2_str}"
 
     return CourtAvailabilityResponse(
         date=date,
@@ -230,11 +232,12 @@ def create_booking(
     date: str,
     time_slot: str,
     customer_name: str,
-    customer_phone: str
+    customer_phone: str,
+    duration_hours: int = 1
 ) -> BookingResponse:
     """
     Creates a new tennis court reservation in the SQL database and optionally syncs with Google Calendar.
-    Prevents double-booking with strict conflict validation.
+    Prevents double-booking with strict conflict validation across all requested duration hours.
     """
     if court_id not in [1, 2]:
         return BookingResponse(
@@ -248,25 +251,48 @@ def create_booking(
             message="Invalid court number. Please select Court 1 or Court 2."
         )
 
-    # Check availability
-    avail = check_court_availability(db, date, time_slot, court_id)
-    is_free = avail.court_1_available if court_id == 1 else avail.court_2_available
-    court_name = settings.COURT_1_NAME if court_id == 1 else settings.COURT_2_NAME
-
-    if not is_free:
-        msg = avail.summary_text
+    try:
+        duration_hours = int(duration_hours)
+    except (ValueError, TypeError):
+        duration_hours = 1
+    if duration_hours < 1:
+        duration_hours = 1
+    if duration_hours > 6:
         return BookingResponse(
             success=False,
             court_id=court_id,
-            court_name=court_name,
+            court_name=f"Court {court_id}",
             date=date,
             start_time=time_slot,
-            end_time=calculate_end_time(time_slot),
+            end_time=time_slot,
             status="failed",
-            message=msg
+            message="Mohon maaf, durasi maksimal reservasi dalam satu booking adalah 6 jam."
         )
 
-    end_time = calculate_end_time(time_slot)
+    court_name = settings.COURT_1_NAME if court_id == 1 else settings.COURT_2_NAME
+
+    # Check availability across all requested consecutive hours
+    for h_offset in range(duration_hours):
+        try:
+            slot_dt = datetime.datetime.strptime(time_slot, "%H:%M") + datetime.timedelta(hours=h_offset)
+            slot_str = slot_dt.strftime("%H:%M")
+        except Exception:
+            slot_str = time_slot
+        avail = check_court_availability(db, date, slot_str, court_id)
+        is_free = avail.court_1_available if court_id == 1 else avail.court_2_available
+        if not is_free:
+            return BookingResponse(
+                success=False,
+                court_id=court_id,
+                court_name=court_name,
+                date=date,
+                start_time=time_slot,
+                end_time=calculate_end_time(time_slot, duration_hours),
+                status="failed",
+                message=f"Mohon maaf, untuk jam {slot_str} pada tanggal {date} {court_name} tidak tersedia ({avail.summary_text})."
+            )
+
+    end_time = calculate_end_time(time_slot, duration_hours)
 
     # Create database record in pending_payment status (Do not sync with Google Calendar yet)
     new_booking = Booking(
@@ -299,9 +325,10 @@ def create_booking(
 
     # Generate payment transaction details
     bid = cast(int, new_booking.id)
+    total_amount = duration_hours * settings.HOURLY_RATE_IDR
     payment_info = payment_service.create_midtrans_transaction(
         booking_id=bid,
-        amount=settings.HOURLY_RATE_IDR,
+        amount=total_amount,
         customer_name=customer_name,
         customer_phone=customer_phone
     )

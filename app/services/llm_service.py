@@ -71,6 +71,10 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     "customer_name": {
                         "type": "string",
                         "description": "Optional name of the customer. Defaults to contact name if omitted."
+                    },
+                    "duration_hours": {
+                        "type": "integer",
+                        "description": "Number of consecutive hours to book (1 to 4 hours). Defaults to 1."
                     }
                 },
                 "required": ["court_id", "date", "time_slot"]
@@ -244,6 +248,25 @@ def _extract_court_id(val: Any, default: Optional[int] = None) -> Optional[int]:
     return default
 
 
+def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
+    dur = args.get("duration_hours")
+    if dur is not None:
+        try:
+            return max(1, min(6, int(dur)))
+        except (ValueError, TypeError):
+            pass
+    end_time = args.get("end_time")
+    if end_time:
+        try:
+            sh = int(slot.split(":")[0])
+            eh = int(str(end_time).split(":")[0])
+            if eh > sh:
+                return max(1, min(6, eh - sh))
+        except Exception:
+            pass
+    return 1
+
+
 def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], default_phone: str, default_name: str = "Warga") -> Any:
     """Dispatches tool execution to the calendar service.
     
@@ -267,6 +290,7 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
 
     elif tool_name == "book_court":
         slot = _extract_slot(arguments)
+        dur = _extract_duration_hours(arguments, slot)
         court_id = _extract_court_id(arguments.get("court_id"), default=1)
         c_name = arguments.get("customer_name")
         if not c_name or not c_name.strip() or c_name.lower() in ["warga", "customer"]:
@@ -278,7 +302,8 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
             date=arguments["date"],
             time_slot=slot,
             customer_name=c_name,
-            customer_phone=default_phone
+            customer_phone=default_phone,
+            duration_hours=dur
         )
         return res.model_dump()
 
