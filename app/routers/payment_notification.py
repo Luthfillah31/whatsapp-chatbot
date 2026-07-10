@@ -20,12 +20,7 @@ async def send_payment_receipt(phone_number: str, receipt_text: str):
             logger.info(f"Simulator payment receipt:\n{receipt_text}")
         else:
             logger.info(f"Sending WhatsApp receipt to {phone_number}")
-            if settings.WHATSAPP_TOKEN and settings.WHATSAPP_PHONE_NUMBER_ID:
-                await whatsapp_service.send_meta_whatsapp_message(phone_number, receipt_text)
-            elif settings.EVOLUTION_API_URL and settings.EVOLUTION_API_KEY:
-                await whatsapp_service.send_evolution_message(phone_number, receipt_text)
-            else:
-                logger.warning(f"No WhatsApp messaging service configured. Cannot send receipt to {phone_number}.")
+            await whatsapp_service.send_whatsapp_message(phone_number, receipt_text)
     except Exception as e:
         logger.error(f"Failed to send receipt to {phone_number}: {e}", exc_info=True)
 

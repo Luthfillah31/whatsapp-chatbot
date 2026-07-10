@@ -34,7 +34,7 @@ async def process_and_reply_telegram(msg: IncomingChatMessage):
 
 
 async def process_and_reply_meta(msg: IncomingChatMessage):
-    """Background worker to run OpenRouter LLM loop and send WhatsApp reply via Meta API."""
+    """Background worker to run OpenRouter LLM loop and send WhatsApp reply via configured API."""
     db = SessionLocal()
     try:
         reply_text = llm_service.process_chat_message(
@@ -43,7 +43,7 @@ async def process_and_reply_meta(msg: IncomingChatMessage):
             sender_name=msg.sender_name,
             message_text=msg.message_text
         )
-        await whatsapp_service.send_meta_whatsapp_message(msg.sender_phone, reply_text)
+        await whatsapp_service.send_whatsapp_message(msg.sender_phone, reply_text)
     except Exception as e:
         logger.error(f"Error processing Meta message in background: {e}", exc_info=True)
     finally:
@@ -51,7 +51,7 @@ async def process_and_reply_meta(msg: IncomingChatMessage):
 
 
 async def process_and_reply_evolution(msg: IncomingChatMessage):
-    """Background worker to run OpenRouter LLM loop and send reply via Evolution API."""
+    """Background worker to run OpenRouter LLM loop and send reply via configured API."""
     db = SessionLocal()
     try:
         reply_text = llm_service.process_chat_message(
@@ -60,7 +60,7 @@ async def process_and_reply_evolution(msg: IncomingChatMessage):
             sender_name=msg.sender_name,
             message_text=msg.message_text
         )
-        await whatsapp_service.send_evolution_message(msg.sender_phone, reply_text)
+        await whatsapp_service.send_whatsapp_message(msg.sender_phone, reply_text)
     except Exception as e:
         logger.error(f"Error processing Evolution message in background: {e}", exc_info=True)
     finally:

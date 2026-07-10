@@ -308,6 +308,26 @@ async def _background_retry_whatsapp_message(url: str, headers: dict, data: dict
     logger.error(f"Background worker gave up sending WhatsApp message to {phone_number} after 15 attempts.")
 
 
+_client: Optional[httpx.AsyncClient] = None
+
+
+def get_http_client() -> httpx.AsyncClient:
+    global _client
+    if _client is None or _client.is_closed:
+        limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
+        _client = httpx.AsyncClient(limits=limits, timeout=15.0)
+    return _client
+
+
+async def send_whatsapp_message(phone_number: str, text: str) -> bool:
+    """Unified WhatsApp sender that uses Evolution API if configured, otherwise falls back to Meta Cloud API."""
+    if settings.EVOLUTION_API_URL and settings.EVOLUTION_API_KEY:
+        logger.info(f"Sending message to {phone_number} via Evolution API...")
+        return await send_evolution_message(phone_number, text)
+    logger.info(f"Sending message to {phone_number} via Meta Cloud API...")
+    return await send_meta_whatsapp_message(phone_number, text)
+
+
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
     """Sends a text message reply via Meta WhatsApp Cloud API with multi-layer fallback and exponential backoff retries."""
     formatted_text = format_text_for_whatsapp(text)
@@ -336,37 +356,37 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
             logger.info(f"Retrying Meta WhatsApp outbound message (round {attempt_round}/{max_rounds}) after {backoff_sec}s delay...")
             await asyncio.sleep(backoff_sec)
 
-        # Attempt 1: System curl via subprocess (OS-level network and TLS optimization)
-        result = await asyncio.to_thread(_send_via_curl, url, headers, data)
-        if result:
-            return True
+        # Attempt 1: Standard httpx AsyncClient (Proper Python API) with Connection Pooling
+        try:
+            client = get_http_client()
+            resp = await client.post(url, headers=headers, json=data, timeout=15.0)
+            if resp.status_code == 200:
+                logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
+                return True
+            else:
+                logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
+                # If Meta returns HTTP error response, no point retrying transport layer
+                return False
+        except Exception as e:
+            logger.warning(f"httpx Meta outbound failed: {e}")
 
         # Attempt 2: Standard Python urllib.request
-        logger.info("curl failed or unavailable, attempting outbound via standard urllib...")
+        logger.info("httpx failed, attempting outbound via standard urllib...")
         result = await asyncio.to_thread(_send_via_urllib, url, headers, data)
         if result:
             return True
 
-        # Attempt 3: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
-        logger.info("urllib failed, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
-        result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
+        # Attempt 3: System curl via subprocess
+        logger.info("urllib failed, attempting outbound via system curl...")
+        result = await asyncio.to_thread(_send_via_curl, url, headers, data)
         if result:
             return True
 
-        # Attempt 4: Standard httpx AsyncClient
-        logger.warning("Raw socket failed, trying httpx fallback...")
-        try:
-            async with httpx.AsyncClient(timeout=15.0) as client:
-                resp = await client.post(url, headers=headers, json=data)
-                if resp.status_code == 200:
-                    logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
-                    return True
-                else:
-                    logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
-                    # If Meta returns HTTP error response, no point retrying transport layer
-                    return False
-        except Exception as e:
-            logger.error(f"httpx Meta outbound failed: {e}")
+        # Attempt 4: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
+        logger.info("curl failed, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
+        result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
+        if result:
+            return True
 
     logger.error("All immediate outbound rounds to graph.facebook.com failed. Spawning background task to keep retrying every 30s...")
     asyncio.create_task(_background_retry_whatsapp_message(url, headers, data, phone_number))
