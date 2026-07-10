@@ -73,19 +73,31 @@ def calculate_end_time(start_time: str, duration_hours: int = 1) -> str:
 
 
 def check_calendar_date(date: str) -> Dict[str, Any]:
-    """Checks exact Day of the Week for any given date string."""
+    """Checks exact Day of the Week and whether the date is past/today/future."""
+    today = datetime.date.today()
     try:
         dt = datetime.date.fromisoformat(date)
         day_name = get_indonesian_day_name(dt)
+        if dt < today:
+            summary = f"[PERINGATAN KRISIAL: Tanggal {date} ({day_name}) SUDAH LEWAT / MASA LALU!] Anda WAJIB memberi tahu pengguna bahwa tanggal {date} sudah lewat dan tidak bisa dicek atau dipesan. DILARANG menanyakan jam main!"
+            is_past = True
+        elif dt == today:
+            summary = f"KALENDER RESMI: Tanggal {date} adalah HARI INI ({day_name.upper()})."
+            is_past = False
+        else:
+            summary = f"KALENDER RESMI: Tanggal {date} adalah HARI {day_name.upper()}."
+            is_past = False
         return {
             "date": date,
             "day_name": day_name,
-            "summary_text": f"KALENDER RESMI: Tanggal {date} adalah HARI {day_name.upper()}."
+            "is_past": is_past,
+            "summary_text": summary
         }
     except Exception:
         return {
             "date": date,
             "day_name": "Unknown",
+            "is_past": False,
             "summary_text": f"Format tanggal {date} tidak valid (Gunakan YYYY-MM-DD)."
         }
 
@@ -114,12 +126,13 @@ def check_court_availability(
         )
 
     if booking_date < today:
+        day_name = get_indonesian_day_name(booking_date)
         return CourtAvailabilityResponse(
             date=date,
             time_slot=time_slot or "",
             court_1_available=False,
             court_2_available=False,
-            summary_text=f"Mohon maaf, tanggal {date} sudah lewat. Silakan pilih tanggal hari ini atau yang akan datang."
+            summary_text=f"[PERINGATAN KRISIAL: Tanggal {date} ({day_name}) SUDAH LEWAT / MASA LALU!] Mohon maaf, tanggal {date} sudah lewat. Anda WAJIB menolak permintaan ini dan DILARANG menanyakan jam main untuk tanggal yang sudah lewat."
         )
 
     day_name = get_indonesian_day_name(booking_date)

@@ -218,3 +218,15 @@ def test_check_calendar_date_and_optional_time_slot(test_db):
     avail_empty = calendar_service.check_court_availability(test_db, "2026-07-26", time_slot="")
     assert avail_empty.time_slot == "ALL_DAY"
     assert "MINGGU" in avail_empty.summary_text
+
+
+def test_past_date_rejection_in_tools(test_db):
+    """Verify check_calendar_date and check_court_availability warn strongly on past dates."""
+    past_date = "2020-01-01"
+    cal_res = calendar_service.check_calendar_date(past_date)
+    assert cal_res["is_past"] is True
+    assert "SUDAH LEWAT" in cal_res["summary_text"]
+
+    avail_res = calendar_service.check_court_availability(test_db, past_date, time_slot="")
+    assert avail_res.court_1_available is False
+    assert "SUDAH LEWAT" in avail_res.summary_text
