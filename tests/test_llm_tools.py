@@ -157,3 +157,28 @@ def test_enforce_neutral_tone():
     sample2 = "Insya Allah jadwal Bapak sudah terdaftar."
     assert enforce_neutral_tone(sample2) == "Jadwal Bapak sudah terdaftar."
 
+
+def test_dsml_parsing_and_stripping():
+    """Verify that models emitting text-format XML/DSML tool calls are parsed and stripped properly."""
+    from app.services.llm_service import extract_dsml_tool_calls, strip_dsml_tags
+    raw_text = (
+        "Saya cek dulu ketersediaan Lapangan 1 jam 20:00.\n\n"
+        "<｜DSML｜tool_calls>\n"
+        "<｜DSML｜invoke name=\"check_court_availability\">\n"
+        "<｜DSML｜parameter name=\"court_id\" string=\"true\">1</｜DSML｜parameter>\n"
+        "<｜DSML｜parameter name=\"date\" string=\"true\">2026-07-10</｜DSML｜parameter>\n"
+        "<｜DSML｜parameter name=\"time_slot\" string=\"true\">20:00</｜DSML｜parameter>\n"
+        "</｜DSML｜invoke>\n"
+        "</｜DSML｜tool_calls>"
+    )
+    calls = extract_dsml_tool_calls(raw_text)
+    assert len(calls) == 1
+    fn_name, fn_args = calls[0]
+    assert fn_name == "check_court_availability"
+    assert fn_args == {"court_id": 1, "date": "2026-07-10", "time_slot": "20:00"}
+
+    stripped = strip_dsml_tags(raw_text)
+    assert "<｜DSML｜" not in stripped
+    assert "check_court_availability" not in stripped
+    assert "Saya cek dulu ketersediaan Lapangan 1 jam 20:00." in stripped
+

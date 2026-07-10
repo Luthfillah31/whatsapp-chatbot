@@ -2,7 +2,7 @@ import json
 import logging
 import datetime
 import re
-from typing import List, Dict, Any, Optional, cast
+from typing import List, Dict, Any, Optional, cast, Tuple
 from openai import OpenAI
 from openai.types.chat import ChatCompletion
 from sqlalchemy.orm import Session
@@ -292,6 +292,38 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
 
 
 
+def strip_dsml_tags(text: str) -> str:
+    """Removes raw DSML / XML tool call markup that some models leak into text content."""
+    if not text:
+        return ""
+    cleaned = re.sub(r'<(?:[\|\uff5c]DSML[\|\uff5c])?tool_calls>[\s\S]*?</(?:[\|\uff5c]DSML[\|\uff5c])?tool_calls>', '', text)
+    cleaned = re.sub(r'<(?:[\|\uff5c]DSML[\|\uff5c])?invoke[\s\S]*?</(?:[\|\uff5c]DSML[\|\uff5c])?invoke>', '', cleaned)
+    cleaned = re.sub(r'\n{3,}', '\n\n', cleaned).strip()
+    return cleaned
+
+
+def extract_dsml_tool_calls(content: str) -> List[Tuple[str, Dict[str, Any]]]:
+    """Parses text-based DSML/XML tool calls emitted by models like DeepSeek / Ling."""
+    if not content:
+        return []
+    invoke_pattern = r'<(?:[\|\uff5c]DSML[\|\uff5c])?invoke\s+name="([^"]+)">([\s\S]*?)</(?:[\|\uff5c]DSML[\|\uff5c])?invoke>'
+    param_pattern = r'<(?:[\|\uff5c]DSML[\|\uff5c])?parameter\s+name="([^"]+)"[^>]*>([\s\S]*?)</(?:[\|\uff5c]DSML[\|\uff5c])?parameter>'
+    found = []
+    for match in re.finditer(invoke_pattern, content):
+        fn_name = match.group(1).strip()
+        params_str = match.group(2)
+        args = {}
+        for p_match in re.finditer(param_pattern, params_str):
+            p_name = p_match.group(1).strip()
+            p_val = p_match.group(2).strip()
+            if p_val.isdigit():
+                args[p_name] = int(p_val)
+            else:
+                args[p_name] = p_val
+        found.append((fn_name, args))
+    return found
+
+
 def enforce_neutral_tone(text: str) -> str:
     """Removes non-neutral interjections or religious expressions to maintain a strictly professional persona."""
     if not text:
@@ -379,6 +411,9 @@ def process_chat_message(
 
         response_message = response.choices[0].message
         tool_calls = response_message.tool_calls
+        parsed_dsml_calls = []
+        if not tool_calls and response_message.content:
+            parsed_dsml_calls = extract_dsml_tool_calls(response_message.content)
 
         # Check if the LLM invoked any tools
         if tool_calls:
@@ -410,6 +445,20 @@ def process_chat_message(
                 temperature=0.3
             ))
             final_reply = second_response.choices[0].message.content
+        elif parsed_dsml_calls:
+            messages.append({"role": "assistant", "content": strip_dsml_tags(response_message.content) or "Memeriksa jadwal..."})
+            for fn_name, fn_args in parsed_dsml_calls:
+                fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
+                messages.append({
+                    "role": "user",
+                    "content": f"[Hasil Tool {fn_name}]: {json.dumps(fn_result, ensure_ascii=False)}"
+                })
+            second_response = cast(ChatCompletion, get_client().chat.completions.create(
+                model=settings.OPENROUTER_MODEL,
+                messages=cast(Any, messages),
+                temperature=0.3
+            ))
+            final_reply = second_response.choices[0].message.content
         else:
             final_reply = response_message.content
 
@@ -420,6 +469,7 @@ def process_chat_message(
     if final_reply is None:
         final_reply = "🎾 Mohon maaf, tidak ada respons dari server saat ini. Silakan coba lagi."
 
+    final_reply = strip_dsml_tags(final_reply)
     final_reply = enforce_neutral_tone(final_reply)
 
     # Log assistant reply to DB
