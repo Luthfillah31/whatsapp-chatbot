@@ -298,7 +298,7 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
 
         res = calendar_service.create_booking(
             db=db,
-            court_id=int(court_id or 1),
+            court_id=court_id or 1,
             date=arguments["date"],
             time_slot=slot,
             customer_name=c_name,

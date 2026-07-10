@@ -251,10 +251,11 @@ def create_booking(
             message="Invalid court number. Please select Court 1 or Court 2."
         )
 
-    try:
-        duration_hours = int(duration_hours)
-    except (ValueError, TypeError):
-        duration_hours = 1
+    if not isinstance(duration_hours, int):
+        try:
+            duration_hours = int(duration_hours)
+        except (ValueError, TypeError):
+            duration_hours = 1
     if duration_hours < 1:
         duration_hours = 1
     if duration_hours > 6:
