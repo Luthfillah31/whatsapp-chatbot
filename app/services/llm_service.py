@@ -188,10 +188,18 @@ INFORMASI PENTING KOMPLEK PERUMAHAN:
 IDENTITAS PENGGUNA AKTIF:
 - ID Kontak warga saat ini: {sender_phone}
 
+===== ATURAN KRISIAL ANTI-HALUSINASI LINK PEMBAYARAN (WAJIB DIPATUHI!) =====
+1. DILARANG KERAS MENGARANG / MENULIS LINK PEMBAYARAN SENDIRI DI DALAM TEKS!
+   - Anda TIDAK BOLEH menulis URL / link pembayaran palsu (seperti /payments/mock?order_id=...) di dalam teks jawaban Anda.
+   - Link pembayaran resmi HANYA didapatkan dari hasil eksekusi tool 'book_court'.
+2. JIKA WARGA SETUJU PESAN / BOOKING, WAJIB EKSEKUSI TOOL 'book_court':
+   - Setiap kali warga menyatakan setuju untuk booking (misal: "ya setuju boleh", "oke pesan", "lanjutkan booking"), Anda WAJIB memanggil tool 'book_court' secara nyata.
+   - DILARANG KERAS memberikan link pembayaran tanpa menjalankan tool 'book_court'.
+
 ===== ALUR PELAYANAN RESERVASI WARGA =====
 1. CEK JADWAL KOSONG: Jika warga bertanya jadwal kosong atau menanyakan lapangan yang kosong, PANGGIL TOOL check_court_availability, lalu beritahu hasilnya secara netral.
 2. BOOKING LAPANGAN:
-   - Jika warga secara eksplisit meminta untuk melakukan booking/reservasi (misalnya: "saya mau booking...", "tolong pesankan...", "booking jam 9..."), Anda WAJIB langsung memanggil tool 'book_court' tanpa melakukan cek ketersediaan terlebih dahulu dengan 'check_court_availability'.
+   - Jika warga secara eksplisit meminta atau menyetujui booking/reservasi (misalnya: "saya mau booking...", "ya setuju boleh", "oke pesan"), Anda WAJIB langsung memanggil tool 'book_court'.
    - Jika nama warga sudah pernah disebutkan sebelumnya dalam riwayat percakapan, gunakan nama tersebut untuk parameter 'customer_name' dan langsung panggil tool 'book_court'.
    - Jika nama warga belum pernah disebutkan, Anda wajib menanyakan nama warga secara santai untuk dicantumkan pada jadwal. Nama satu kata (misalnya: "Wira", "Junaedi") adalah nama yang valid dan harus langsung digunakan.
    - JANGAN PERNAH MENANYAKAN NOMOR HP/KONTAK! Nomor kontak otomatis menggunakan akun yang sedang aktif.
@@ -462,6 +470,7 @@ def process_chat_message(
         max_turns = 3
         current_turn = 0
         final_reply = None
+        book_court_called = False
 
         while current_turn < max_turns:
             current_turn += 1
@@ -483,6 +492,8 @@ def process_chat_message(
                 messages.append(msg)
                 for tool_call in tool_calls:
                     fn_name = tool_call.function.name
+                    if fn_name == "book_court":
+                        book_court_called = True
                     try:
                         fn_args = json.loads(tool_call.function.arguments)
                     except Exception:
@@ -499,6 +510,8 @@ def process_chat_message(
             elif parsed_dsml_calls:
                 messages.append({"role": "assistant", "content": strip_dsml_tags(msg.content) or "Memeriksa jadwal..."})
                 for fn_name, fn_args in parsed_dsml_calls:
+                    if fn_name == "book_court":
+                        book_court_called = True
                     fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
                     messages.append({
                         "role": "user",
@@ -506,7 +519,17 @@ def process_chat_message(
                     })
                 continue
             else:
-                final_reply = msg.content
+                text_content = msg.content or ""
+                # Detect hallucinated payment link without book_court execution
+                if not book_court_called and ("payments/mock" in text_content or "order_id=booking-" in text_content):
+                    logger.warning("Detected hallucinated payment link without book_court call. Intercepting and prompting tool execution...")
+                    messages.append({"role": "assistant", "content": text_content})
+                    messages.append({
+                        "role": "user",
+                        "content": "SISTEM PERINGATAN: Anda menuliskan link pembayaran di teks tanpa memanggil tool 'book_court'. Anda WAJIB memanggil tool 'book_court' sekarang juga untuk mendaftarkan reservasi resmi ke database!"
+                    })
+                    continue
+                final_reply = text_content
                 break
 
     except Exception as e:
@@ -515,6 +538,9 @@ def process_chat_message(
 
     if final_reply is None:
         final_reply = "🎾 Mohon maaf, tidak ada respons dari server saat ini. Silakan coba lagi."
+
+    if not book_court_called and final_reply and ("payments/mock" in final_reply or "order_id=booking-" in final_reply):
+        final_reply = "🎾 Mohon konfirmasi sekali lagi detail pesanan Anda (Tanggal, Jam, dan Lapangan) agar saya dapat memproses pendaftaran booking resminya ke database sekarang."
 
     final_reply = strip_dsml_tags(final_reply)
     final_reply = enforce_neutral_tone(final_reply)
