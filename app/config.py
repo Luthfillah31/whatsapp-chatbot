@@ -7,7 +7,7 @@ from pydantic_settings import BaseSettings, SettingsConfigDict
 class Settings(BaseSettings):
     # OpenRouter AI
     OPENROUTER_API_KEY: str = "test_key"
-    OPENROUTER_MODEL: str = "inclusionai/ling-2.6-flash"
+    OPENROUTER_MODEL: str = "deepseek/deepseek-v4-flash"
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # Tennis Courts Configuration
