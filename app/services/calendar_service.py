@@ -314,7 +314,7 @@ def create_booking(
             duration_hours = 1
     if duration_hours < 1:
         duration_hours = 1
-    if duration_hours > 6:
+    if duration_hours > 18:
         return BookingResponse(
             success=False,
             court_id=court_id,
