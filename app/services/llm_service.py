@@ -489,11 +489,11 @@ def process_chat_message(
     if not messages or messages[-1].get("content") != message_text:
         messages.append({"role": "user", "content": message_text})
 
+    book_court_called = False
     try:
         max_turns = 3
         current_turn = 0
         final_reply = None
-        book_court_called = False
 
         while current_turn < max_turns:
             current_turn += 1
