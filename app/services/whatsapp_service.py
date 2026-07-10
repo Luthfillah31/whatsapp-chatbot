@@ -335,9 +335,14 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
         return False
 
-    host = "graph.facebook.com"
+    base_url = getattr(settings, "WHATSAPP_API_BASE_URL", "https://graph.facebook.com").rstrip("/")
+    if not base_url.startswith("http://") and not base_url.startswith("https://"):
+        base_url = f"https://{base_url}"
+    from urllib.parse import urlparse
+    parsed = urlparse(base_url)
+    host = parsed.netloc or parsed.path or "graph.facebook.com"
     path = f"/v18.0/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
-    url = f"https://{host}{path}"
+    url = f"{base_url}{path}"
     headers = {
         "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"

@@ -35,6 +35,7 @@ class Settings(BaseSettings):
     WHATSAPP_TOKEN: Optional[str] = ""
     WHATSAPP_PHONE_NUMBER_ID: Optional[str] = ""
     WHATSAPP_VERIFY_TOKEN: str = "my_secret_verify_token_123"
+    WHATSAPP_API_BASE_URL: str = "https://graph.facebook.com"
 
     # Telegram Bot API (Optional / Multi-Platform)
     TELEGRAM_BOT_TOKEN: Optional[str] = ""
