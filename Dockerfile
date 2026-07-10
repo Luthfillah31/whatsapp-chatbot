@@ -19,5 +19,5 @@ COPY . .
 # Expose port 7860 for Hugging Face Spaces
 EXPOSE 7860
 
-# Command to run the application supporting dynamic $PORT (Railway) or default 7860 (Hugging Face)
-CMD uvicorn app.main:app --host 0.0.0.0 --port ${PORT:-7860}
+# Command to run the application supporting dynamic $PORT (Railway) or default 8000/7860
+CMD ["python", "run.py"]
