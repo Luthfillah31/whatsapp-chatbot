@@ -292,7 +292,7 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
 
 
 
-def strip_dsml_tags(text: str) -> str:
+def strip_dsml_tags(text: Optional[str]) -> str:
     """Removes raw DSML / XML tool call markup that some models leak into text content."""
     if not text:
         return ""
