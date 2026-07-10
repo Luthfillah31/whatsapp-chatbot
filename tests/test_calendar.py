@@ -230,3 +230,10 @@ def test_past_date_rejection_in_tools(test_db):
     avail_res = calendar_service.check_court_availability(test_db, past_date, time_slot="")
     assert avail_res.court_1_available is False
     assert "SUDAH LEWAT" in avail_res.summary_text
+
+
+def test_wib_timezone_helpers():
+    """Verify get_wib_now and get_wib_today return dates in UTC+7 (WIB)."""
+    wib_now = calendar_service.get_wib_now()
+    assert wib_now.tzinfo is not None
+    assert calendar_service.get_wib_today() == wib_now.date()

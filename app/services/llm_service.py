@@ -161,7 +161,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
 
 def get_system_prompt(sender_phone: str) -> str:
     """Generates customer-oriented system prompt with strict rules against technical jargon or strange text."""
-    today_dt = datetime.date.today()
+    today_dt = calendar_service.get_wib_today()
     indonesian_days = {
         "Monday": "Senin", "Tuesday": "Selasa", "Wednesday": "Rabu",
         "Thursday": "Kamis", "Friday": "Jumat", "Saturday": "Sabtu", "Sunday": "Minggu"

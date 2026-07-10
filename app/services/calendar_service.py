@@ -16,6 +16,19 @@ from app.services import payment_service
 
 logger = logging.getLogger(__name__)
 
+WIB_TZ = datetime.timezone(datetime.timedelta(hours=7))
+
+
+def get_wib_now() -> datetime.datetime:
+    """Returns current datetime in WIB (Asia/Jakarta, UTC+7)."""
+    return datetime.datetime.now(WIB_TZ)
+
+
+def get_wib_today() -> datetime.date:
+    """Returns current date in WIB (Asia/Jakarta, UTC+7)."""
+    return get_wib_now().date()
+
+
 INDONESIAN_DAYS = {
     "Monday": "Senin",
     "Tuesday": "Selasa",
@@ -74,7 +87,7 @@ def calculate_end_time(start_time: str, duration_hours: int = 1) -> str:
 
 def check_calendar_date(date: str) -> Dict[str, Any]:
     """Checks exact Day of the Week and whether the date is past/today/future."""
-    today = datetime.date.today()
+    today = get_wib_today()
     try:
         dt = datetime.date.fromisoformat(date)
         day_name = get_indonesian_day_name(dt)
@@ -113,7 +126,7 @@ def check_court_availability(
     Queries the local SQL database as the primary source of truth, and verifies against Google Calendar if configured.
     """
     # Validate: reject past dates entirely
-    today = datetime.date.today()
+    today = get_wib_today()
     try:
         booking_date = datetime.date.fromisoformat(date)
     except (ValueError, TypeError):
@@ -466,7 +479,7 @@ def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = No
     
     Optionally filters by a specific date. If omitted, returns bookings from today onwards.
     """
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    today_str = get_wib_today().strftime("%Y-%m-%d")
     query = db.query(Booking).filter(
         Booking.customer_phone == customer_phone,
         Booking.status.in_(["confirmed", "pending_payment"])
@@ -498,7 +511,7 @@ def get_user_bookings_by_verification(db: Session, customer_phone: str, customer
     
     SECURITY: Both parameters must match (case-insensitive name match) to prevent unauthorized inspection.
     """
-    today_str = datetime.date.today().strftime("%Y-%m-%d")
+    today_str = get_wib_today().strftime("%Y-%m-%d")
     query = db.query(Booking).filter(
         Booking.customer_phone == customer_phone,
         Booking.status.in_(["confirmed", "pending_payment"])

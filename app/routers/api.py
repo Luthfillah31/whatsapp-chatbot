@@ -17,7 +17,7 @@ router = APIRouter(prefix="/api", tags=["API & Schedule"])
 
 @router.get("/schedule", response_model=DailyScheduleResponse)
 def get_daily_schedule(
-    date: str = Query(default_factory=lambda: datetime.date.today().strftime("%Y-%m-%d")),
+    date: str = Query(default_factory=lambda: calendar_service.get_wib_today().strftime("%Y-%m-%d")),
     db: Session = Depends(get_db)
 ):
     """Returns the hourly availability grid for Tennis Court 1 and Court 2 on a given date."""
