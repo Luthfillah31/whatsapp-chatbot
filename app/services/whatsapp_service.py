@@ -363,17 +363,16 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
             logger.info(f"Retrying Meta WhatsApp outbound message (round {attempt_round}/{max_rounds}) after {backoff_sec}s delay...")
             await asyncio.sleep(backoff_sec)
 
-        # Attempt 1: Standard httpx AsyncClient (Proper Python API) with Connection Pooling
+        # Attempt 1: Standard httpx AsyncClient with fresh connection per request
         try:
-            client = get_http_client()
-            resp = await client.post(url, headers=headers, json=data, timeout=15.0)
-            if resp.status_code == 200:
-                logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
-                return True
-            else:
-                logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
-                # If Meta returns HTTP error response, no point retrying transport layer
-                return False
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(url, headers=headers, json=data)
+                if resp.status_code == 200:
+                    logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
+                    return True
+                else:
+                    logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
+                    return False
         except Exception as e:
             logger.warning(f"httpx Meta outbound failed: {e}")
 
