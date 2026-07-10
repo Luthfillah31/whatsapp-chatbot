@@ -420,67 +420,55 @@ def process_chat_message(
         messages.append({"role": "user", "content": message_text})
 
     try:
-        # First OpenRouter API Call
-        response = cast(ChatCompletion, get_client().chat.completions.create(
-            model=settings.OPENROUTER_MODEL,
-            messages=messages,
-            tools=cast(Any, TENNIS_TOOLS),
-            tool_choice="auto",
-            temperature=0.3
-        ))
+        max_turns = 3
+        current_turn = 0
+        final_reply = None
 
-        response_message = response.choices[0].message
-        tool_calls = response_message.tool_calls
-        parsed_dsml_calls = []
-        if not tool_calls and response_message.content:
-            parsed_dsml_calls = extract_dsml_tool_calls(response_message.content)
-
-        # Check if the LLM invoked any tools
-        if tool_calls:
-            # Append assistant message with tool calls to conversation
-            messages.append(response_message)
-
-            for tool_call in tool_calls:
-                fn_name = tool_call.function.name
-                try:
-                    fn_args = json.loads(tool_call.function.arguments)
-                except Exception:
-                    fn_args = {}
-
-                # Execute function against local DB / Google Calendar
-                fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
-
-                # Append tool execution result back to conversation
-                messages.append({
-                    "tool_call_id": tool_call.id,
-                    "role": "tool",
-                    "name": fn_name,
-                    "content": json.dumps(fn_result)
-                })
-
-            # Second OpenRouter API Call: Generate response based on tool results
-            second_response = cast(ChatCompletion, get_client().chat.completions.create(
+        while current_turn < max_turns:
+            current_turn += 1
+            response = cast(ChatCompletion, get_client().chat.completions.create(
                 model=settings.OPENROUTER_MODEL,
-                messages=cast(Any, messages),
+                messages=messages,
+                tools=cast(Any, TENNIS_TOOLS),
+                tool_choice="auto",
                 temperature=0.3
             ))
-            final_reply = second_response.choices[0].message.content
-        elif parsed_dsml_calls:
-            messages.append({"role": "assistant", "content": strip_dsml_tags(response_message.content) or "Memeriksa jadwal..."})
-            for fn_name, fn_args in parsed_dsml_calls:
-                fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
-                messages.append({
-                    "role": "user",
-                    "content": f"[Hasil Tool {fn_name}]: {json.dumps(fn_result, ensure_ascii=False)}"
-                })
-            second_response = cast(ChatCompletion, get_client().chat.completions.create(
-                model=settings.OPENROUTER_MODEL,
-                messages=cast(Any, messages),
-                temperature=0.3
-            ))
-            final_reply = second_response.choices[0].message.content
-        else:
-            final_reply = response_message.content
+
+            msg = response.choices[0].message
+            tool_calls = msg.tool_calls
+            parsed_dsml_calls = []
+            if not tool_calls and msg.content:
+                parsed_dsml_calls = extract_dsml_tool_calls(msg.content)
+
+            if tool_calls:
+                messages.append(msg)
+                for tool_call in tool_calls:
+                    fn_name = tool_call.function.name
+                    try:
+                        fn_args = json.loads(tool_call.function.arguments)
+                    except Exception:
+                        fn_args = {}
+
+                    fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
+                    messages.append({
+                        "tool_call_id": tool_call.id,
+                        "role": "tool",
+                        "name": fn_name,
+                        "content": json.dumps(fn_result)
+                    })
+                continue
+            elif parsed_dsml_calls:
+                messages.append({"role": "assistant", "content": strip_dsml_tags(msg.content) or "Memeriksa jadwal..."})
+                for fn_name, fn_args in parsed_dsml_calls:
+                    fn_result = execute_tool_call(db, fn_name, fn_args, default_phone=phone_number, default_name=sender_name)
+                    messages.append({
+                        "role": "user",
+                        "content": f"[Hasil Tool {fn_name}]: {json.dumps(fn_result, ensure_ascii=False)}"
+                    })
+                continue
+            else:
+                final_reply = msg.content
+                break
 
     except Exception as e:
         logger.error(f"OpenRouter API Error: {e}", exc_info=True)
