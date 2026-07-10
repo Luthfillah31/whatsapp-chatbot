@@ -203,3 +203,10 @@ def test_alias_tool_parameter_names(test_db):
     assert res["start_time"] == "08:00"
     assert res["status"] == "pending_payment"
 
+
+def test_extract_slot_default_empty():
+    """Verify missing time slot returns empty string without defaulting to 08:00."""
+    from app.services.llm_service import _extract_slot
+    assert _extract_slot({}) == ""
+    assert _extract_slot({"time_slot": "10:00"}) == "10:00"
+

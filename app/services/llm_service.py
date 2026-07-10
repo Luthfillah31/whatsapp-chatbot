@@ -264,8 +264,10 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
     return sanitized
 
 
-def _extract_slot(args: Dict[str, Any]) -> str:
-    slot = args.get("time_slot") or args.get("start_time") or args.get("time") or "08:00"
+def _extract_slot(args: Dict[str, Any], default: str = "") -> str:
+    slot = args.get("time_slot") or args.get("start_time") or args.get("time")
+    if not slot:
+        return default
     return str(slot).strip()
 
 
