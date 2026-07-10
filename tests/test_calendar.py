@@ -41,7 +41,7 @@ def test_double_booking_prevention(test_db):
         customer_phone="222"
     )
     assert res2.success is False
-    assert "already booked" in res2.message.lower()
+    assert ("already booked" in res2.message.lower() or "sudah terisi" in res2.message.lower())
 
     # But Court 2 at 14:00 should succeed!
     res3 = calendar_service.create_booking(
@@ -170,3 +170,21 @@ def test_2factor_verification_flow(test_db):
     # Verify booking status is cancelled
     verified_after = calendar_service.get_user_bookings_by_verification(test_db, "08123456789", "Luthfi Akhtar")
     assert len(verified_after) == 0
+
+
+def test_reject_non_hourly_fractional_minutes(test_db):
+    """Verify check_court_availability and create_booking reject non-hourly slots (e.g. 09:35 or 12:35)."""
+    avail = calendar_service.check_court_availability(test_db, "2026-08-20", "09:35", court_id=1)
+    assert avail.court_1_available is False
+    assert "bulat" in avail.summary_text.lower()
+
+    book_res = calendar_service.create_booking(
+        db=test_db,
+        court_id=1,
+        date="2026-08-20",
+        time_slot="12:35",
+        customer_name="Daffa",
+        customer_phone="08123"
+    )
+    assert book_res.success is False
+    assert "bulat" in book_res.message.lower()

@@ -52,7 +52,7 @@ def test_execute_tool_call_availability(test_db):
     assert res["date"] == "2026-10-10"
     assert res["court_1_available"] is True
     assert res["court_2_available"] is True
-    assert "available" in res["summary_text"].toLowerCase() if hasattr(res["summary_text"], "toLowerCase") else "available" in res["summary_text"].lower()
+    assert ("available" in res["summary_text"].lower() or "tersedia" in res["summary_text"].lower())
 
 
 def test_execute_tool_call_booking_and_listing(test_db):

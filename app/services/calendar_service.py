@@ -16,6 +16,21 @@ from app.services import payment_service
 
 logger = logging.getLogger(__name__)
 
+INDONESIAN_DAYS = {
+    "Monday": "Senin",
+    "Tuesday": "Selasa",
+    "Wednesday": "Rabu",
+    "Thursday": "Kamis",
+    "Friday": "Jumat",
+    "Saturday": "Sabtu",
+    "Sunday": "Minggu"
+}
+
+
+def get_indonesian_day_name(dt: datetime.date) -> str:
+    return INDONESIAN_DAYS.get(dt.strftime("%A"), dt.strftime("%A"))
+
+
 # Try importing Google API client libraries
 try:
     from google.oauth2 import service_account
@@ -106,6 +121,21 @@ def check_court_availability(
     except (ValueError, IndexError):
         pass
 
+    # Validate: reject non-hourly time slots (minutes != 0)
+    try:
+        parts = time_slot.split(":")
+        req_m = int(parts[1]) if len(parts) > 1 else 0
+        if req_m != 0:
+            return CourtAvailabilityResponse(
+                date=date,
+                time_slot=time_slot,
+                court_1_available=False,
+                court_2_available=False,
+                summary_text=f"Mohon maaf, penyewaan lapangan hanya tersedia per blok 1 jam bulat (misal: 08:00, 09:00, 10:00). Format jam dengan menit pecahan '{time_slot}' tidak tersedia."
+            )
+    except Exception:
+        pass
+
     # Validate operating hours
     try:
         start_h = int(settings.CLUB_OPENING_HOUR.split(":")[0])
@@ -172,17 +202,18 @@ def check_court_availability(
     c2_avail = 2 not in booked_court_ids
 
     # If specific court was requested, adjust summary text
-    rate = settings.HOURLY_RATE_USD
+    day_name = get_indonesian_day_name(booking_date)
+    rate = settings.HOURLY_RATE_IDR
     if court_id == 1:
-        status_text = f"available (${rate}/hr)" if c1_avail else "already BOOKED"
-        summary = f"On {date} at {time_slot}, {settings.COURT_1_NAME} is {status_text}."
+        status_text = f"tersedia (Rp {rate:,}/jam)" if c1_avail else "SUDAH TERISI"
+        summary = f"Hari {day_name}, {date} jam {time_slot}: {settings.COURT_1_NAME} {status_text}."
     elif court_id == 2:
-        status_text = f"available (${rate}/hr)" if c2_avail else "already BOOKED"
-        summary = f"On {date} at {time_slot}, {settings.COURT_2_NAME} is {status_text}."
+        status_text = f"tersedia (Rp {rate:,}/jam)" if c2_avail else "SUDAH TERISI"
+        summary = f"Hari {day_name}, {date} jam {time_slot}: {settings.COURT_2_NAME} {status_text}."
     else:
-        c1_str = f"Available (${rate}/hr)" if c1_avail else "Booked"
-        c2_str = f"Available (${rate}/hr)" if c2_avail else "Booked"
-        summary = f"On {date} at {time_slot}:\n- {settings.COURT_1_NAME}: {c1_str}\n- {settings.COURT_2_NAME}: {c2_str}"
+        c1_str = f"Tersedia (Rp {rate:,}/jam)" if c1_avail else "Sudah Terisi"
+        c2_str = f"Tersedia (Rp {rate:,}/jam)" if c2_avail else "Sudah Terisi"
+        summary = f"Hari {day_name}, {date} jam {time_slot}:\n- {settings.COURT_1_NAME}: {c1_str}\n- {settings.COURT_2_NAME}: {c2_str}"
 
     return CourtAvailabilityResponse(
         date=date,
@@ -223,7 +254,7 @@ def create_booking(
     court_name = settings.COURT_1_NAME if court_id == 1 else settings.COURT_2_NAME
 
     if not is_free:
-        msg = avail.summary_text if "operasional" in avail.summary_text.lower() else f"Sorry! {court_name} is already booked on {date} at {time_slot}. Please choose another time or check the other court."
+        msg = avail.summary_text
         return BookingResponse(
             success=False,
             court_id=court_id,
