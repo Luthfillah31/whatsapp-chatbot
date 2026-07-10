@@ -72,6 +72,24 @@ def calculate_end_time(start_time: str, duration_hours: int = 1) -> str:
         return f"{hour:02d}:{parts[1] if len(parts) > 1 else '00'}"
 
 
+def check_calendar_date(date: str) -> Dict[str, Any]:
+    """Checks exact Day of the Week for any given date string."""
+    try:
+        dt = datetime.date.fromisoformat(date)
+        day_name = get_indonesian_day_name(dt)
+        return {
+            "date": date,
+            "day_name": day_name,
+            "summary_text": f"KALENDER RESMI: Tanggal {date} adalah HARI {day_name.upper()}."
+        }
+    except Exception:
+        return {
+            "date": date,
+            "day_name": "Unknown",
+            "summary_text": f"Format tanggal {date} tidak valid (Gunakan YYYY-MM-DD)."
+        }
+
+
 def check_court_availability(
     db: Session, 
     date: str, 
@@ -98,10 +116,22 @@ def check_court_availability(
     if booking_date < today:
         return CourtAvailabilityResponse(
             date=date,
-            time_slot=time_slot,
+            time_slot=time_slot or "",
             court_1_available=False,
             court_2_available=False,
             summary_text=f"Mohon maaf, tanggal {date} sudah lewat. Silakan pilih tanggal hari ini atau yang akan datang."
+        )
+
+    day_name = get_indonesian_day_name(booking_date)
+    cal_alert = f"[PENGINGAT KALENDER RESMI: Tanggal {date} adalah HARI {day_name.upper()}! Jika pengguna menyebut nama hari lain (seperti Senin/Selasa), Anda WAJIB langsung memberi tahu bahwa {date} adalah Hari {day_name}.]\n"
+
+    if not time_slot or time_slot.strip() == "" or time_slot.lower() in ["all_day", "none", "null"]:
+        return CourtAvailabilityResponse(
+            date=date,
+            time_slot="ALL_DAY",
+            court_1_available=True,
+            court_2_available=True,
+            summary_text=f"{cal_alert}Tanggal {date} jatuh pada Hari {day_name}. Jam operasional kompleks: 05:00 - 23:00 WIB. Silakan tanyakan kepada warga ingin menyewa mulai jam berapa."
         )
 
     # Validate: reject past time slots for today

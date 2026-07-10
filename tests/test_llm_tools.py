@@ -20,10 +20,11 @@ def test_db():
 def test_tools_schema_validity():
     """Verify that all tools defined for OpenRouter follow the required schema format."""
     assert isinstance(TENNIS_TOOLS, list)
-    assert len(TENNIS_TOOLS) == 5
+    assert len(TENNIS_TOOLS) == 6
 
     tool_names = [str(t.get("function", {}).get("name")) for t in TENNIS_TOOLS if isinstance(t, dict) and isinstance(t.get("function"), dict)]
     assert "check_court_availability" in tool_names
+    assert "check_calendar_date" in tool_names
     assert "book_court" in tool_names
     assert "cancel_booking" in tool_names
     assert "list_my_bookings" in tool_names

@@ -43,7 +43,24 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                         "enum": [1, 2]
                     }
                 },
-                "required": ["date", "time_slot"]
+                "required": ["date"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "check_calendar_date",
+            "description": "Checks the exact official day of the week (e.g. Senin, Selasa, Minggu) for any date in YYYY-MM-DD format.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "date": {
+                        "type": "string",
+                        "description": "Date to verify in YYYY-MM-DD format (e.g. '2026-07-26')."
+                    }
+                },
+                "required": ["date"]
             }
         }
     },
@@ -164,12 +181,15 @@ def get_system_prompt(sender_phone: str) -> str:
    - DILARANG KERAS menambahkan, mengarang, atau melanjutkan urutan jam yang TIDAK ADA di dalam hasil tool!
 
 ===== ATURAN KETAT VALIDASI HARI, TANGGAL & DURASI (WAJIB DIPATUHI!) =====
-1. VALIDASI NAMA HARI DAN TANGGAL:
-   - Perhatikan kesesuaian antara Nama Hari dan Tanggal yang disebutkan warga.
-   - Jika warga menyebutkan nama hari yang TIDAK COCOK dengan tanggalnya (misalnya warga berkata "Senin 16 Juli 2026" padahal 16 Juli 2026 adalah hari Kamis), Anda WAJIB mengoreksi/mengonfirmasi terlebih dahulu agar tidak terjadi kesalahan tanggal!
-2. ATURAN DURASI DAN JAM (HANYA KELIPATAN 1 JAM BULAT):
-   - Penyewaan lapangan HANYA TERSEDIA per blok 1 jam penuh tepat pada jam bulat (misal: 08:00 - 09:00, 09:00 - 10:00).
-   - DILARANG KERAS menyetujui atau memproses durasi dengan menit ganjil/pecahan (seperti 3 jam 35 menit, atau jam 09:00 hingga 12:35). Jika warga meminta jam dengan menit pecahan (misal hingga 12:35), TOLAK DENGAN SOPAN dan jelaskan bahwa sistem hanya melayani pemesanan per jam bulat (misal hingga 12:00 atau 13:00).
+1. VALIDASI HARI DAN TANGGAL DALAM KALENDER (ANTI-HALUSINASI HARI):
+   - JANGAN PERNAH menebak atau mengarang hari untuk suatu tanggal dari ingatan/asumsi Anda sendiri!
+   - Setiap kali warga menanyakan hari atau menyebutkan kombinasi tanggal dan hari (misal "26 Juli hari Senin"), Anda WAJIB memanggil tool 'check_calendar_date' atau 'check_court_availability' untuk memeriksa kalender resmi.
+   - Jika warga menyebutkan nama hari yang TIDAK COCOK dengan tanggalnya (misalnya warga berkata "Senin 26 Juli 2026" padahal 26 Juli 2026 adalah Hari Minggu), Anda WAJIB langsung memberi tahu koreksi harinya dengan sopan!
+2. ATURAN DURASI DAN ANTI-ASUMSI JAM MAIN:
+   - Jika warga TIDAK MENYEBUTKAN jam mulai bermain (misalnya hanya berkata "Lapang 1 2 jam"), Anda DILARANG KERAS menebak, mengasumsikan, atau mengambil jam dari contoh teks sebelumnya (seperti jam 08:00).
+   - Anda WAJIB menanyakan jam mulai bermain terlebih dahulu: "Baik Pak/Bu, ingin bermain mulai jam berapa?"
+   - JANGAN PERNAH memproses booking jika jam mulai belum disebutkan secara jelas oleh warga!
+   - Penyewaan lapangan HANYA TERSEDIA per blok 1 jam penuh tepat pada jam bulat (misal: 08:00 - 09:00, 09:00 - 10:00). DILARANG memproses durasi menit pecahan.
 
 ===== ATURAN GAYA BAHASA & ANTI-JARGON =====
 1. CUSTOMER ORIENTED: Selalu bersikap membantu, hangat, sopan, dan solutif. Sapa warga dengan "Pak/Bu".
@@ -285,7 +305,10 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
     """
     logger.info(f"Executing Tool: {tool_name} with args: {arguments} for phone: {default_phone}")
     
-    if tool_name == "check_court_availability":
+    if tool_name == "check_calendar_date":
+        return calendar_service.check_calendar_date(arguments["date"])
+
+    elif tool_name == "check_court_availability":
         slot = _extract_slot(arguments)
         court_id = _extract_court_id(arguments.get("court_id"), default=None)
         res = calendar_service.check_court_availability(

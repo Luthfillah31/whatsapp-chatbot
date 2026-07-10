@@ -205,6 +205,16 @@ def test_multi_hour_booking(test_db):
     assert book_res.start_time == "06:00"
     assert book_res.end_time == "10:00"
 
-    # Any overlapping hour in 06:00 - 10:00 (e.g. 07:00 or 08:00) should now be reported as booked
     avail07 = calendar_service.check_court_availability(test_db, "2026-08-25", "07:00", court_id=1)
     assert avail07.court_1_available is False
+
+
+def test_check_calendar_date_and_optional_time_slot(test_db):
+    """Verify check_calendar_date returns exact Indonesian day and check_court_availability handles empty slot."""
+    cal_res = calendar_service.check_calendar_date("2026-07-26")
+    assert cal_res["day_name"] == "Minggu"
+    assert "MINGGU" in cal_res["summary_text"]
+
+    avail_empty = calendar_service.check_court_availability(test_db, "2026-07-26", time_slot="")
+    assert avail_empty.time_slot == "ALL_DAY"
+    assert "MINGGU" in avail_empty.summary_text
