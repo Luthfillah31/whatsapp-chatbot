@@ -1,4 +1,5 @@
 import logging
+import asyncio
 from typing import Dict, Any
 from fastapi import APIRouter, Depends, Query, HTTPException, Request, BackgroundTasks, status
 from fastapi.responses import JSONResponse
@@ -8,6 +9,9 @@ from app.models.schemas import IncomingChatMessage
 from app.services import whatsapp_service, llm_service, telegram_service
 
 logger = logging.getLogger(__name__)
+
+# In-memory deduplication cache for incoming webhook message IDs
+PROCESSED_MESSAGE_IDS: set = set()
 
 router = APIRouter(prefix="/webhook", tags=["Webhooks"])
 
@@ -92,8 +96,15 @@ async def receive_whatsapp_webhook(request: Request, background_tasks: Backgroun
         payload = await request.json()
         incoming_msgs = whatsapp_service.parse_meta_webhook(payload)
         for msg in incoming_msgs:
+            if msg.message_id and msg.message_id in PROCESSED_MESSAGE_IDS:
+                logger.info(f"Duplicate Meta WhatsApp message_id {msg.message_id} ignored.")
+                continue
+            if msg.message_id:
+                if len(PROCESSED_MESSAGE_IDS) >= 2000:
+                    PROCESSED_MESSAGE_IDS.clear()
+                PROCESSED_MESSAGE_IDS.add(msg.message_id)
             logger.info(f"Received Meta WhatsApp message from {msg.sender_phone}: {msg.message_text}")
-            background_tasks.add_task(process_and_reply_meta, msg)
+            asyncio.create_task(process_and_reply_meta(msg))
     except Exception as e:
         logger.error(f"Error receiving WhatsApp webhook: {e}", exc_info=True)
         

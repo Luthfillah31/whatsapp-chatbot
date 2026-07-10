@@ -46,10 +46,10 @@ def test_execute_tool_call_availability(test_db):
     res = execute_tool_call(
         db=test_db,
         tool_name="check_court_availability",
-        arguments={"date": "2026-07-10", "time_slot": "16:00"},
+        arguments={"date": "2026-10-10", "time_slot": "16:00"},
         default_phone="+15550192"
     )
-    assert res["date"] == "2026-07-10"
+    assert res["date"] == "2026-10-10"
     assert res["court_1_available"] is True
     assert res["court_2_available"] is True
     assert "available" in res["summary_text"].toLowerCase() if hasattr(res["summary_text"], "toLowerCase") else "available" in res["summary_text"].lower()
@@ -63,7 +63,7 @@ def test_execute_tool_call_booking_and_listing(test_db):
         tool_name="book_court",
         arguments={
             "court_id": 1,
-            "date": "2026-07-10",
+            "date": "2026-10-10",
             "time_slot": "16:00",
             "customer_name": "John Doe",
             "customer_phone": "+15550000"
@@ -78,7 +78,7 @@ def test_execute_tool_call_booking_and_listing(test_db):
     avail_res = execute_tool_call(
         db=test_db,
         tool_name="check_court_availability",
-        arguments={"date": "2026-07-10", "time_slot": "16:00"},
+        arguments={"date": "2026-10-10", "time_slot": "16:00"},
         default_phone="+15550000"
     )
     assert avail_res["court_1_available"] is False
