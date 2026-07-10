@@ -128,8 +128,16 @@ def _send_via_curl(url: str, headers: dict, data: dict) -> bool:
         for k, v in headers.items():
             if k.lower() != "content-type":
                 cmd.extend(["-H", f"{k}: {v}"])
-        cmd.extend(["-d", json.dumps(data), "--connect-timeout", "6", "--max-time", "20", "--retry", "2", "--retry-delay", "1"])
-        logger.info("Attempting outbound WhatsApp message via system curl (with auto-retry & happy eyeballs)...")
+        cmd.extend([
+            "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
+            "--http1.1",
+            "-d", json.dumps(data),
+            "--connect-timeout", "6",
+            "--max-time", "20",
+            "--retry", "2",
+            "--retry-delay", "1"
+        ])
+        logger.info("Attempting outbound WhatsApp message via system curl (with browser UA & http1.1)...")
         res = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
         if res.returncode == 0 and res.stdout:
             logger.info(f"Message sent via curl! Response: {res.stdout[:200]}")
@@ -284,6 +292,22 @@ def _send_via_urllib(url: str, headers: dict, data: dict) -> bool:
         return False
 
 
+async def _background_retry_whatsapp_message(url: str, headers: dict, data: dict, phone_number: str):
+    """Background worker that retries sending a WhatsApp message every 30s if transient throttling occurred."""
+    for retry_idx in range(1, 16):
+        await asyncio.sleep(30)
+        logger.info(f"Background worker retrying delayed WhatsApp message to {phone_number} (attempt {retry_idx}/15)...")
+        result = await asyncio.to_thread(_send_via_curl, url, headers, data)
+        if result:
+            logger.info(f"Delayed WhatsApp message to {phone_number} successfully sent on background attempt {retry_idx}!")
+            return
+        result = await asyncio.to_thread(_send_via_urllib, url, headers, data)
+        if result:
+            logger.info(f"Delayed WhatsApp message to {phone_number} successfully sent via urllib on background attempt {retry_idx}!")
+            return
+    logger.error(f"Background worker gave up sending WhatsApp message to {phone_number} after 15 attempts.")
+
+
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
     """Sends a text message reply via Meta WhatsApp Cloud API with multi-layer fallback and exponential backoff retries."""
     formatted_text = format_text_for_whatsapp(text)
@@ -344,7 +368,8 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         except Exception as e:
             logger.error(f"httpx Meta outbound failed: {e}")
 
-    logger.error("All outbound rounds to graph.facebook.com failed after retries.")
+    logger.error("All immediate outbound rounds to graph.facebook.com failed. Spawning background task to keep retrying every 30s...")
+    asyncio.create_task(_background_retry_whatsapp_message(url, headers, data, phone_number))
     return False
 
 
