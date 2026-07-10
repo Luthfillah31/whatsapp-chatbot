@@ -214,7 +214,7 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
         except Exception as e:
             logger.debug(f"Could not set TCP_MAXSEG: {e}")
 
-        sock.settimeout(5.0)
+        sock.settimeout(10.0)
         ssock = None
         try:
             sock.connect((ip, 443))
@@ -261,8 +261,26 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
     return False
 
 
+def _send_via_urllib(url: str, headers: dict, data: dict) -> bool:
+    """Attempt 2: Uses standard Python urllib.request as reliable outbound fallback."""
+    try:
+        req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
+        with urllib.request.urlopen(req, timeout=15) as resp:
+            status = resp.getcode()
+            body = resp.read().decode("utf-8", errors="replace")
+            if status == 200:
+                logger.info(f"Message sent successfully via urllib! Response: {body[:200]}")
+                return True
+            else:
+                logger.error(f"Meta API error ({status}) via urllib: {body[:500]}")
+                return False
+    except Exception as e:
+        logger.warning(f"urllib outbound failed: {e}")
+        return False
+
+
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
-    """Sends a text message reply via Meta WhatsApp Cloud API with MSS clamping and fallback."""
+    """Sends a text message reply via Meta WhatsApp Cloud API with multi-layer fallback."""
     formatted_text = format_text_for_whatsapp(text)
     if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
@@ -287,17 +305,22 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
     if result:
         return True
 
-    # Attempt 2: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
-    logger.info("curl failed or unavailable, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
+    # Attempt 2: Standard Python urllib.request
+    logger.info("curl failed or unavailable, attempting outbound via standard urllib...")
+    result = await asyncio.to_thread(_send_via_urllib, url, headers, data)
+    if result:
+        return True
+
+    # Attempt 3: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
+    logger.info("urllib failed, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
     result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
     if result:
         return True
 
-    # Attempt 3: httpx with forced IPv4 binding and retries
+    # Attempt 4: Standard httpx AsyncClient
     logger.warning("Raw socket failed, trying httpx fallback...")
     try:
-        transport = httpx.AsyncHTTPTransport(retries=2, local_address="0.0.0.0")
-        async with httpx.AsyncClient(transport=transport, timeout=15.0) as client:
+        async with httpx.AsyncClient(timeout=15.0) as client:
             resp = await client.post(url, headers=headers, json=data)
             if resp.status_code == 200:
                 logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
