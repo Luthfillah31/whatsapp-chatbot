@@ -128,9 +128,9 @@ def _send_via_curl(url: str, headers: dict, data: dict) -> bool:
         for k, v in headers.items():
             if k.lower() != "content-type":
                 cmd.extend(["-H", f"{k}: {v}"])
-        cmd.extend(["-d", json.dumps(data), "--connect-timeout", "8", "--max-time", "15", "--ipv4"])
-        logger.info("Attempting outbound WhatsApp message via system curl...")
-        res = subprocess.run(cmd, capture_output=True, text=True, timeout=20)
+        cmd.extend(["-d", json.dumps(data), "--connect-timeout", "6", "--max-time", "20", "--retry", "2", "--retry-delay", "1"])
+        logger.info("Attempting outbound WhatsApp message via system curl (with auto-retry & happy eyeballs)...")
+        res = subprocess.run(cmd, capture_output=True, text=True, timeout=25)
         if res.returncode == 0 and res.stdout:
             logger.info(f"Message sent via curl! Response: {res.stdout[:200]}")
             try:
@@ -190,6 +190,11 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
     if not ips:
         logger.error(f"No IPv4 addresses found for {host}")
         return False
+
+    # Include known stable Meta Anycast IPv4 endpoints as backup candidates
+    for sip in ["157.240.199.35", "185.60.218.35", "31.13.80.35", "157.240.22.35"]:
+        if sip not in ips:
+            ips.append(sip)
 
     # Prioritize 157.x and 185.x subnets which have proven reliable on cloud containers
     ips.sort(key=lambda ip: 0 if ip.startswith(("157.", "185.", "31.")) else 1)
