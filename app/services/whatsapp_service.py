@@ -124,7 +124,7 @@ def _send_via_curl(url: str, headers: dict, data: dict) -> bool:
     """Attempt 1: Uses system curl via subprocess which has robust OS-level TLS, ALPN, and path MTU handling."""
     import subprocess
     try:
-        cmd = ["curl", "-s", "-X", "POST", url, "-H", "Content-Type: application/json"]
+        cmd = ["curl", "-4", "-s", "-X", "POST", url, "-H", "Content-Type: application/json"]
         for k, v in headers.items():
             if k.lower() != "content-type":
                 cmd.extend(["-H", f"{k}: {v}"])
@@ -132,8 +132,8 @@ def _send_via_curl(url: str, headers: dict, data: dict) -> bool:
             "-A", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/122.0.0.0 Safari/537.36",
             "--http1.1",
             "-d", json.dumps(data),
-            "--connect-timeout", "6",
-            "--max-time", "20",
+            "--connect-timeout", "8",
+            "--max-time", "18",
             "--retry", "2",
             "--retry-delay", "1"
         ])
@@ -220,12 +220,6 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
     for ip in ips:
         logger.info(f"Trying raw socket connection to {host} via IPv4: {ip} ...")
         sock = socket.socket(socket.AF_INET, socket.SOCK_STREAM)
-        try:
-            if hasattr(socket, "TCP_MAXSEG"):
-                sock.setsockopt(socket.IPPROTO_TCP, socket.TCP_MAXSEG, 1024)
-        except Exception as e:
-            logger.debug(f"Could not set TCP_MAXSEG: {e}")
-
         sock.settimeout(10.0)
         ssock = None
         try:
@@ -337,7 +331,8 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
         return False
 
-    base_url = getattr(settings, "WHATSAPP_API_BASE_URL", "https://graph.facebook.com").rstrip("/")
+    raw_base = getattr(settings, "WHATSAPP_API_BASE_URL", None) or "https://graph.facebook.com"
+    base_url = raw_base.strip().rstrip("/")
     if not base_url.startswith("http://") and not base_url.startswith("https://"):
         base_url = f"https://{base_url}"
     from urllib.parse import urlparse
@@ -345,6 +340,7 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
     host = parsed.netloc or parsed.path or "graph.facebook.com"
     path = f"/v18.0/{settings.WHATSAPP_PHONE_NUMBER_ID}/messages"
     url = f"{base_url}{path}"
+    logger.info(f"Outbound WhatsApp request target: {url} (host={host})")
     headers = {
         "Authorization": f"Bearer {settings.WHATSAPP_TOKEN}",
         "Content-Type": "application/json"
@@ -374,7 +370,7 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
                     logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
                     return False
         except Exception as e:
-            logger.warning(f"httpx Meta outbound failed: {e}")
+            logger.warning(f"httpx Meta outbound to {host} failed ({type(e).__name__}): {repr(e)}")
 
         # Attempt 2: Standard Python urllib.request
         logger.info("httpx failed, attempting outbound via standard urllib...")
