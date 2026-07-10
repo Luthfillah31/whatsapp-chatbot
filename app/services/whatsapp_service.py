@@ -285,7 +285,7 @@ def _send_via_urllib(url: str, headers: dict, data: dict) -> bool:
 
 
 async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
-    """Sends a text message reply via Meta WhatsApp Cloud API with multi-layer fallback."""
+    """Sends a text message reply via Meta WhatsApp Cloud API with multi-layer fallback and exponential backoff retries."""
     formatted_text = format_text_for_whatsapp(text)
     if not settings.WHATSAPP_TOKEN or not settings.WHATSAPP_PHONE_NUMBER_ID:
         logger.warning("Meta WhatsApp API credentials not configured. Skipping outbound message.")
@@ -305,38 +305,46 @@ async def send_meta_whatsapp_message(phone_number: str, text: str) -> bool:
         "text": {"body": formatted_text}
     }
 
-    # Attempt 1: System curl via subprocess (OS-level network and TLS optimization)
-    result = await asyncio.to_thread(_send_via_curl, url, headers, data)
-    if result:
-        return True
+    max_rounds = 3
+    for attempt_round in range(1, max_rounds + 1):
+        if attempt_round > 1:
+            backoff_sec = 1.5 * (attempt_round - 1)
+            logger.info(f"Retrying Meta WhatsApp outbound message (round {attempt_round}/{max_rounds}) after {backoff_sec}s delay...")
+            await asyncio.sleep(backoff_sec)
 
-    # Attempt 2: Standard Python urllib.request
-    logger.info("curl failed or unavailable, attempting outbound via standard urllib...")
-    result = await asyncio.to_thread(_send_via_urllib, url, headers, data)
-    if result:
-        return True
+        # Attempt 1: System curl via subprocess (OS-level network and TLS optimization)
+        result = await asyncio.to_thread(_send_via_curl, url, headers, data)
+        if result:
+            return True
 
-    # Attempt 3: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
-    logger.info("urllib failed, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
-    result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
-    if result:
-        return True
+        # Attempt 2: Standard Python urllib.request
+        logger.info("curl failed or unavailable, attempting outbound via standard urllib...")
+        result = await asyncio.to_thread(_send_via_urllib, url, headers, data)
+        if result:
+            return True
 
-    # Attempt 4: Standard httpx AsyncClient
-    logger.warning("Raw socket failed, trying httpx fallback...")
-    try:
-        async with httpx.AsyncClient(timeout=15.0) as client:
-            resp = await client.post(url, headers=headers, json=data)
-            if resp.status_code == 200:
-                logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
-                return True
-            else:
-                logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
-                return False
-    except Exception as e:
-        logger.error(f"httpx Meta outbound failed: {e}")
+        # Attempt 3: Raw IPv4 socket with Cloudflare DoH enrichment and TCP MSS clamping
+        logger.info("urllib failed, attempting outbound WhatsApp message via raw socket with DoH enrichment...")
+        result = await asyncio.to_thread(_send_via_raw_ipv4_socket, host, path, headers, data)
+        if result:
+            return True
 
-    logger.error("All outbound methods to graph.facebook.com failed.")
+        # Attempt 4: Standard httpx AsyncClient
+        logger.warning("Raw socket failed, trying httpx fallback...")
+        try:
+            async with httpx.AsyncClient(timeout=15.0) as client:
+                resp = await client.post(url, headers=headers, json=data)
+                if resp.status_code == 200:
+                    logger.info(f"Message sent to {phone_number} via Meta Cloud API (httpx).")
+                    return True
+                else:
+                    logger.error(f"Meta Cloud API error ({resp.status_code}): {resp.text}")
+                    # If Meta returns HTTP error response, no point retrying transport layer
+                    return False
+        except Exception as e:
+            logger.error(f"httpx Meta outbound failed: {e}")
+
+    logger.error("All outbound rounds to graph.facebook.com failed after retries.")
     return False
 
 
