@@ -214,6 +214,22 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
     return sanitized
 
 
+def _extract_slot(args: Dict[str, Any]) -> str:
+    slot = args.get("time_slot") or args.get("start_time") or args.get("time") or "08:00"
+    return str(slot).strip()
+
+
+def _extract_court_id(val: Any, default: Optional[int] = None) -> Optional[int]:
+    if val is None:
+        return default
+    if isinstance(val, int):
+        return val
+    digits = re.findall(r'\d+', str(val))
+    if digits:
+        return int(digits[0])
+    return default
+
+
 def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], default_phone: str, default_name: str = "Warga") -> Any:
     """Dispatches tool execution to the calendar service.
     
@@ -225,24 +241,28 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
     logger.info(f"Executing Tool: {tool_name} with args: {arguments} for phone: {default_phone}")
     
     if tool_name == "check_court_availability":
+        slot = _extract_slot(arguments)
+        court_id = _extract_court_id(arguments.get("court_id"), default=None)
         res = calendar_service.check_court_availability(
             db=db,
             date=arguments["date"],
-            time_slot=arguments["time_slot"],
-            court_id=arguments.get("court_id")
+            time_slot=slot,
+            court_id=court_id
         )
         return res.model_dump()
 
     elif tool_name == "book_court":
+        slot = _extract_slot(arguments)
+        court_id = _extract_court_id(arguments.get("court_id"), default=1)
         c_name = arguments.get("customer_name")
         if not c_name or not c_name.strip() or c_name.lower() in ["warga", "customer"]:
             c_name = default_name
 
         res = calendar_service.create_booking(
             db=db,
-            court_id=arguments["court_id"],
+            court_id=int(court_id or 1),
             date=arguments["date"],
-            time_slot=arguments["time_slot"],
+            time_slot=slot,
             customer_name=c_name,
             customer_phone=default_phone
         )

@@ -182,3 +182,23 @@ def test_dsml_parsing_and_stripping():
     assert "check_court_availability" not in stripped
     assert "Saya cek dulu ketersediaan Lapangan 1 jam 20:00." in stripped
 
+
+def test_alias_tool_parameter_names(test_db):
+    """Verify execute_tool_call accepts alias parameters like start_time or time for time_slot."""
+    from app.services.llm_service import execute_tool_call
+    res = execute_tool_call(
+        db=test_db,
+        tool_name="book_court",
+        arguments={
+            "customer_name": "Luthfi",
+            "court_id": "1",
+            "date": "2026-07-15",
+            "start_time": "08:00",
+            "end_time": "09:00"
+        },
+        default_phone="+628123456"
+    )
+    assert res["court_id"] == 1
+    assert res["start_time"] == "08:00"
+    assert res["status"] == "pending_payment"
+
