@@ -165,7 +165,7 @@ def check_court_availability(
         req_h = int(time_slot.split(":")[0])
         req_m = int(time_slot.split(":")[1]) if ":" in time_slot else 0
         if booking_date == today:
-            now = datetime.datetime.now()
+            now = get_wib_now()
             if req_h < now.hour or (req_h == now.hour and req_m <= now.minute):
                 return CourtAvailabilityResponse(
                     date=date,

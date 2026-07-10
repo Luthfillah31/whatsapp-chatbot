@@ -91,7 +91,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     },
                     "duration_hours": {
                         "type": "integer",
-                        "description": "Number of consecutive hours to book (1 to 4 hours). Defaults to 1."
+                        "description": "Number of consecutive hours to book (1 to 6 hours). Defaults to 1."
                     }
                 },
                 "required": ["court_id", "date", "time_slot"]
@@ -189,7 +189,7 @@ def get_system_prompt(sender_phone: str) -> str:
    - Jika warga TIDAK MENYEBUTKAN jam mulai bermain (misalnya hanya berkata "Lapang 1 2 jam"), Anda DILARANG KERAS menebak, mengasumsikan, atau mengambil jam dari contoh teks sebelumnya (seperti jam 08:00).
    - Anda WAJIB menanyakan jam mulai bermain terlebih dahulu: "Baik Pak/Bu, ingin bermain mulai jam berapa?"
    - JANGAN PERNAH memproses booking jika jam mulai belum disebutkan secara jelas oleh warga!
-   - Penyewaan lapangan HANYA TERSEDIA per blok 1 jam penuh tepat pada jam bulat (misal: 08:00 - 09:00, 09:00 - 10:00). DILARANG memproses durasi menit pecahan.
+   - Penyewaan lapangan HANYA TERSEDIA per blok 1 jam penuh tepat pada jam bulat (misal: 08:00 - 09:00, 09:00 - 10:00) dengan durasi 1 hingga maksimal 6 jam per sesi. DILARANG memproses durasi menit pecahan.
 3. TOLAK TANGGAL MASA LALU / SUDAH LEWAT:
    - Hari Ini adalah Hari {today_day}, {today_str}.
    - Jika warga menanyakan atau menyebutkan tanggal yang SUDAH LEWAT (sebelum hari ini), Anda WAJIB LANGSUNG MENOLAK dengan sopan dan menjelaskan bahwa tanggal tersebut sudah lewat.
