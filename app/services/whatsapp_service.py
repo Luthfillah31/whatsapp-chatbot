@@ -199,13 +199,12 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
         logger.error(f"No IPv4 addresses found for {host}")
         return False
 
-    # Include known stable Meta Anycast IPv4 endpoints as backup candidates
-    for sip in ["157.240.199.35", "185.60.218.35", "31.13.80.35", "157.240.22.35"]:
-        if sip not in ips:
-            ips.append(sip)
-
-    # Prioritize 157.x and 185.x subnets which have proven reliable on cloud containers
-    ips.sort(key=lambda ip: 0 if ip.startswith(("157.", "185.", "31.")) else 1)
+    if "facebook.com" in host.lower():
+        # Include known stable Meta Anycast IPv4 endpoints as backup candidates for facebook.com
+        for sip in ["157.240.199.35", "185.60.218.35", "31.13.80.35", "157.240.22.35"]:
+            if sip not in ips:
+                ips.append(sip)
+        ips.sort(key=lambda ip: 0 if ip.startswith(("157.", "185.", "31.")) else 1)
     logger.info(f"Final candidate IPv4 list for {host}: {ips}")
 
     body = json.dumps(data).encode("utf-8")
@@ -277,7 +276,10 @@ def _send_via_raw_ipv4_socket(host: str, path: str, headers: dict, data: dict) -
 def _send_via_urllib(url: str, headers: dict, data: dict) -> bool:
     """Attempt 2: Uses standard Python urllib.request as reliable outbound fallback."""
     try:
-        req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=headers, method="POST")
+        req_headers = dict(headers)
+        if "User-Agent" not in req_headers:
+            req_headers["User-Agent"] = "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36"
+        req = urllib.request.Request(url, data=json.dumps(data).encode("utf-8"), headers=req_headers, method="POST")
         with urllib.request.urlopen(req, timeout=15) as resp:
             status = resp.getcode()
             body = resp.read().decode("utf-8", errors="replace")
@@ -314,7 +316,7 @@ _client: Optional[httpx.AsyncClient] = None
 def get_http_client() -> httpx.AsyncClient:
     global _client
     if _client is None or _client.is_closed:
-        limits = httpx.Limits(max_keepalive_connections=10, max_connections=20)
+        limits = httpx.Limits(max_keepalive_connections=10, max_connections=20, keepalive_expiry=5.0)
         _client = httpx.AsyncClient(limits=limits, timeout=15.0)
     return _client
 
