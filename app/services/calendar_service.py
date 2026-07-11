@@ -597,10 +597,20 @@ def get_daily_schedule(db: Session, date: str) -> DailyScheduleResponse:
     c1_map = {}
     c2_map = {}
     for b in bookings:
-        if b.court_id == 1:
-            c1_map[b.start_time] = b
-        elif b.court_id == 2:
-            c2_map[b.start_time] = b
+        try:
+            sh = int(str(b.start_time).split(":")[0])
+            eh = int(str(b.end_time).split(":")[0])
+            for h in range(sh, max(sh + 1, eh)):
+                t_str = f"{h:02d}:00"
+                if b.court_id == 1:
+                    c1_map[t_str] = b
+                elif b.court_id == 2:
+                    c2_map[t_str] = b
+        except Exception:
+            if b.court_id == 1:
+                c1_map[b.start_time] = b
+            elif b.court_id == 2:
+                c2_map[b.start_time] = b
 
     slots = []
     for hour in range(start_h, end_h):

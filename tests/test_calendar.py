@@ -281,3 +281,24 @@ def test_cancel_booking_flexible_id_and_phone(test_db):
     # Check list_my_bookings does not return the cancelled booking
     my_bookings = calendar_service.get_user_bookings(test_db, customer_phone="6281395470202")
     assert not any(b["booking_id"] == res.booking_id for b in my_bookings)
+
+
+def test_multihour_daily_schedule_grid(test_db):
+    """Verify get_daily_schedule marks every hour of a multi-hour booking as booked."""
+    res = calendar_service.create_booking(
+        db=test_db,
+        court_id=1,
+        date="2026-07-28",
+        time_slot="18:00",
+        customer_name="Luthfi",
+        customer_phone="+628123456",
+        duration_hours=2
+    )
+    assert res.success is True
+
+    sched = calendar_service.get_daily_schedule(test_db, "2026-07-28")
+    slot_map = {s.time: s for s in sched.slots}
+    assert slot_map["18:00"].court_1_status in ["Pending Payment", "Booked"]
+    assert slot_map["19:00"].court_1_status in ["Pending Payment", "Booked"]
+    assert slot_map["18:00"].court_1_customer == "Luthfi"
+    assert slot_map["19:00"].court_1_customer == "Luthfi"
