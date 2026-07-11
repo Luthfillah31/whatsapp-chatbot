@@ -307,6 +307,17 @@ def create_booking(
             message="Invalid court number. Please select Court 1 or Court 2."
         )
 
+    if "-" in str(time_slot):
+        try:
+            parts = [p.strip() for p in str(time_slot).split("-")]
+            sh = int(parts[0].split(":")[0])
+            eh = int(parts[1].split(":")[0])
+            if duration_hours <= 1 and eh > sh:
+                duration_hours = max(1, min(18, eh - sh))
+            time_slot = parts[0]
+        except Exception:
+            pass
+
     if not isinstance(duration_hours, int):
         try:
             duration_hours = int(duration_hours)
@@ -323,7 +334,7 @@ def create_booking(
             start_time=time_slot,
             end_time=time_slot,
             status="failed",
-            message="Mohon maaf, durasi maksimal reservasi dalam satu booking adalah 6 jam."
+            message="Mohon maaf, durasi maksimal reservasi dalam satu booking adalah 18 jam."
         )
 
     court_name = settings.COURT_1_NAME if court_id == 1 else settings.COURT_2_NAME

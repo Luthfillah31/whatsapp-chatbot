@@ -237,3 +237,20 @@ def test_wib_timezone_helpers():
     wib_now = calendar_service.get_wib_now()
     assert wib_now.tzinfo is not None
     assert calendar_service.get_wib_today() == wib_now.date()
+
+
+def test_create_booking_time_range_inference(test_db):
+    """Verify create_booking automatically infers duration and start_time when time_slot is a range string."""
+    res = calendar_service.create_booking(
+        db=test_db,
+        court_id=2,
+        date="2026-07-22",
+        time_slot="15:00 - 18:00",
+        customer_name="Luthfi",
+        customer_phone="+62812345",
+        duration_hours=1
+    )
+    assert res.success is True
+    assert res.start_time == "15:00"
+    assert res.end_time == "18:00"
+    assert res.total_amount == 150000

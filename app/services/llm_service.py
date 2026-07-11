@@ -268,7 +268,10 @@ def _extract_slot(args: Dict[str, Any], default: str = "") -> str:
     slot = args.get("time_slot") or args.get("start_time") or args.get("time")
     if not slot:
         return default
-    return str(slot).strip()
+    s = str(slot).strip()
+    if "-" in s:
+        s = s.split("-")[0].strip()
+    return s
 
 
 def _extract_court_id(val: Any, default: Optional[int] = None) -> Optional[int]:
@@ -283,7 +286,13 @@ def _extract_court_id(val: Any, default: Optional[int] = None) -> Optional[int]:
 
 
 def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
-    dur = args.get("duration_hours")
+    dur = (
+        args.get("duration_hours")
+        or args.get("duration")
+        or args.get("hours")
+        or args.get("durasi")
+        or args.get("lama_sewa")
+    )
     if dur is not None:
         try:
             return max(1, min(18, int(dur)))
@@ -294,6 +303,16 @@ def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
         try:
             sh = int(slot.split(":")[0])
             eh = int(str(end_time).split(":")[0])
+            if eh > sh:
+                return max(1, min(18, eh - sh))
+        except Exception:
+            pass
+    raw_slot = str(args.get("time_slot") or "")
+    if "-" in raw_slot:
+        try:
+            parts = [p.strip() for p in raw_slot.split("-")]
+            sh = int(parts[0].split(":")[0])
+            eh = int(parts[1].split(":")[0])
             if eh > sh:
                 return max(1, min(18, eh - sh))
         except Exception:
