@@ -89,6 +89,14 @@ def handle_midtrans_notification(
         # Send receipt/confirmation to customer
         booking = db.query(Booking).filter(Booking.id == booking_id).first()
         if booking:
+            try:
+                sh = int(str(booking.start_time).split(":")[0])
+                eh = int(str(booking.end_time).split(":")[0])
+                dur = max(1, eh - sh)
+            except Exception:
+                dur = 1
+            total_amount = dur * settings.HOURLY_RATE_IDR
+
             receipt_text = (
                 f"🧾 *KUITANSI PEMBAYARAN RESMI* 🧾\n\n"
                 f"Reservasi Anda telah dikonfirmasi!\n"
@@ -98,7 +106,7 @@ def handle_midtrans_notification(
                 f"Lapangan: {'Tennis Court 1' if booking.court_id == 1 else 'Tennis Court 2'}\n"
                 f"Tanggal: {booking.booking_date}\n"
                 f"Jam: {booking.start_time} - {booking.end_time} WIB\n"
-                f"Biaya: Rp {settings.HOURLY_RATE_IDR:,}\n"
+                f"Biaya: Rp {total_amount:,}\n"
                 f"Status: *LUNAS* (Diterima oleh Midtrans)\n"
                 f"-----------------------------------\n"
                 f"Selamat bermain! 🎾🏡"

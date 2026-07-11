@@ -91,10 +91,10 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     },
                     "duration_hours": {
                         "type": "integer",
-                        "description": "Number of consecutive hours to book (1 to 18 hours). Defaults to 1."
+                        "description": "Number of consecutive hours to book (1 to 18 hours). Must match agreed duration."
                     }
                 },
-                "required": ["court_id", "date", "time_slot"]
+                "required": ["court_id", "date", "time_slot", "duration_hours"]
             }
         }
     },
@@ -295,7 +295,7 @@ def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
             sh = int(slot.split(":")[0])
             eh = int(str(end_time).split(":")[0])
             if eh > sh:
-                return max(1, min(6, eh - sh))
+                return max(1, min(18, eh - sh))
         except Exception:
             pass
     return 1

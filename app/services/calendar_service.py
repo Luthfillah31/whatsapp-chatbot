@@ -410,7 +410,8 @@ def create_booking(
         status="pending_payment",
         payment_url=p_url,
         payment_status="pending",
-        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {settings.HOURLY_RATE_IDR:,} melalui link ini untuk konfirmasi: {p_url}. Batas waktu pembayaran 10 menit."
+        total_amount=total_amount,
+        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {total_amount:,} melalui link ini untuk konfirmasi: {p_url}. Batas waktu pembayaran 10 menit."
     )
 
 

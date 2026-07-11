@@ -44,6 +44,7 @@ class BookingResponse(BaseModel):
     message: str
     payment_url: Optional[str] = None
     payment_status: Optional[str] = None
+    total_amount: Optional[int] = None
 
 
 class CancelBookingRequest(BaseModel):

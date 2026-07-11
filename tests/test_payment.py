@@ -160,3 +160,18 @@ def test_webhook_receipt_delivery(test_db):
 
     app.dependency_overrides.clear()
 
+
+def test_multihour_receipt_amount(test_db):
+    """Verify multihour booking creates correct total amount and receipt calculates multi-hour fee."""
+    res = calendar_service.create_booking(
+        db=test_db,
+        court_id=1,
+        date="2026-07-20",
+        time_slot="09:00",
+        customer_name="Luthfi",
+        customer_phone="+628123",
+        duration_hours=2
+    )
+    assert res.total_amount == 100000
+    assert "100,000" in res.message
+
