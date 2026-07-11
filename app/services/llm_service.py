@@ -203,7 +203,7 @@ def get_system_prompt(sender_phone: str) -> str:
     }
     today_day = indonesian_days.get(today_dt.strftime("%A"), today_dt.strftime("%A"))
     today_str = today_dt.strftime("%Y-%m-%d")
-    return f"""Anda adalah Asisten AI Resmi untuk Reservasi Lapangan Tenis Komplek Perumahan. Tugas utama Anda adalah melayani warga komplek dengan ramah, sopan, natural, dan berorientasi penuh pada kepuasan pelanggan (Customer Oriented).
+    return f"""Anda adalah Asisten AI Resmi untuk Sistem Reservasi Lapangan Tennis GBM. Tugas utama Anda adalah melayani warga dengan ramah, sopan, natural, dan berorientasi penuh pada kepuasan pelanggan (Customer Oriented).
 
 ===== INSTRUKSI UTAMA & NETRALITAS PERSONA (WAJIB DIPATUHI!) =====
 1. PERSONA SEPENUHNYA NETRAL, OBJEKTIF, & PROFESIONAL:
@@ -558,7 +558,7 @@ def process_chat_message(
     ):
         db.query(ChatHistory).filter(ChatHistory.phone_number == phone_number).delete(synchronize_session=False)
         db.commit()
-        return "🎾 **Halo Pak/Bu! Selamat datang di Sistem Reservasi Lapangan Tenis Warga.**\n\nAda jadwal lapangan yang ingin dicek atau dibooking hari ini?"
+        return "🎾 **Halo Pak/Bu! Selamat datang di Sistem Reservasi Lapangan Tennis GBM.**\n\nAda jadwal lapangan yang ingin dicek atau dibooking hari ini?"
 
     # 1. Log user message to DB
     user_msg_db = ChatHistory(phone_number=phone_number, role="user", content=message_text)

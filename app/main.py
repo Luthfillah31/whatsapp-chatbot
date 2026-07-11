@@ -25,7 +25,7 @@ async def lifespan(app: FastAPI):
 
 # Initialize FastAPI app
 app = FastAPI(
-    title="🎾 Sistem Reservasi Lapangan Tenis Warga - Komplek Perumahan",
+    title="🎾 Sistem Reservasi Lapangan Tennis GBM",
     description="Production-grade AI chatbot powered by OpenRouter for residential complex tennis court reservations via Telegram & WhatsApp.",
     version="1.0.0",
     lifespan=lifespan

@@ -7,7 +7,7 @@ from app.config import settings
 
 # Page config with modern title and icon
 st.set_page_config(
-    page_title="Sistem Reservasi Lapangan Warga - Admin Dashboard",
+    page_title="Sistem Reservasi Lapangan Tennis GBM - Admin Dashboard",
     page_icon="🎾",
     layout="wide",
     initial_sidebar_state="collapsed"
@@ -200,8 +200,8 @@ st.markdown("""
 # Header Section
 st.markdown("""
 <div class="header-banner">
-    <div class="header-title">🎾 Sistem Reservasi Lapangan Tenis Warga</div>
-    <div class="header-subtitle">Dashboard Pengurus & Monitoring Jadwal Lapangan Warga Komplek Perumahan</div>
+    <div class="header-title">🎾 Sistem Reservasi Lapangan Tennis GBM</div>
+    <div class="header-subtitle">Dashboard Pengurus & Monitoring Jadwal Lapangan Tennis GBM</div>
 </div>
 """, unsafe_allow_html=True)
 
