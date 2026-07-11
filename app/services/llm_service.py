@@ -122,6 +122,41 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "reschedule_booking",
+            "description": "Reschedule or move an existing reservation ('pindah jadwal', switch court, change time/date) directly WITHOUT requiring a new payment or cancellation. ALWAYS use this tool when a customer wants to move/reschedule an existing booking (e.g. 'Id 40 ke tennis court 1', 'pindah ke jam 7 malam'). NEVER cancel and book again.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "booking_id": {
+                        "type": "integer",
+                        "description": "The numeric ID of the booking to reschedule."
+                    },
+                    "new_date": {
+                        "type": "string",
+                        "description": "Optional new target date in YYYY-MM-DD format. If omitted, keeps existing booking date."
+                    },
+                    "new_time_slot": {
+                        "type": "string",
+                        "description": "Optional new start time slot in 24-hour HH:MM format (e.g., '19:00'). If omitted, keeps existing booking time."
+                    },
+                    "new_court_id": {
+                        "type": "integer",
+                        "description": "Optional new court number (1 or 2). Defaults to existing booking court if omitted.",
+                        "enum": [1, 2]
+                    },
+                    "customer_name": {
+                        "type": "string",
+                        "description": "Optional full name of the customer for 2-factor verification when rescheduling a booking registered under a different phone number."
+                    }
+                },
+                "required": ["booking_id"]
+            }
+        }
+    },
+
+    {
+        "type": "function",
+        "function": {
             "name": "list_my_bookings",
             "description": "List all confirmed upcoming reservations for the active customer. You can optionally filter by a specific date.",
             "parameters": {
@@ -230,8 +265,12 @@ IDENTITAS PENGGUNA AKTIF:
    - Panggilan tool 'book_court' harus dilakukan secara nyata. DILARANG KERAS hanya membalas dengan teks janji memproses tanpa memanggil tool. Batas waktu pembayaran adalah 10 menit.
    - Jika warga menyebutkan jam tanpa keterangan pagi/malam (misalnya: "jam 9", "jam 8", "jam 7") dan waktu pagi hari tersebut sudah lewat, Anda WAJIB mengasumsikan waktu tersebut adalah sore/malam hari (misalnya: "jam 9" berarti "21:00").
 3. CEK RESERVASI SAYA: Jika warga ingin melihat jadwal mereka, WAJIB PANGGIL TOOL list_my_bookings TERLEBIH DAHULU, lalu tampilkan hasilnya APA ADANYA.
-4. PEMBATALAN: Jika ingin batal, minta ID Booking lalu proses pembatalan.
-5. RESET MEMORI: Jika warga ingin hapus history, arahkan untuk mengetik **/reset**, **/clear**, atau **/start**.
+4. PEMINDAHAN JADWAL / PINDAH LAPANGAN / RESCHEDULE:
+   - Jika warga meminta memindahkan jadwal, pindah lapangan, atau ganti jam (misalnya: "Id 40 ke tennis court 1", "pindah ke court 1", "mau pindah jam 7 malam"), Anda WAJIB LANGSUNG MEMANGGIL TOOL 'reschedule_booking'.
+   - DILARANG KERAS menawarkan atau melakukan pembatalan ('cancel_booking') + pembuatan reservasi baru ('book_court') karena akan membuat tagihan bayar baru!
+   - Cukup panggil tool 'reschedule_booking'. Jika warga hanya meminta pindah lapangan tanpa menyebut tanggal/jam baru, cukup isi 'booking_id' dan 'new_court_id' (parameter new_date dan new_time_slot opsional). Sistem otomatis memindahkan jadwal gratis tanpa bayar lagi!
+5. PEMBATALAN: Jika ingin batal, minta ID Booking lalu proses pembatalan.
+6. RESET MEMORI: Jika warga ingin hapus history, arahkan untuk mengetik **/reset**, **/clear**, atau **/start**.
 
 ===== FORMATTING PESAN =====
 - Gunakan tanda bintang ganda **untuk tebal** saat menyoroti Nama Lapangan, Jam, atau Tanggal.
@@ -265,7 +304,14 @@ def _sanitize_bookings_for_llm(bookings: list) -> list:
 
 
 def _extract_slot(args: Dict[str, Any], default: str = "") -> str:
-    slot = args.get("time_slot") or args.get("start_time") or args.get("time")
+    slot = (
+        args.get("new_time_slot")
+        or args.get("time_slot")
+        or args.get("new_start_time")
+        or args.get("start_time")
+        or args.get("time")
+    )
+
     if not slot:
         return default
     s = str(slot).strip()
@@ -285,7 +331,7 @@ def _extract_court_id(val: Any, default: Optional[int] = None) -> Optional[int]:
     return default
 
 
-def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
+def _extract_duration_hours(args: Dict[str, Any], slot: str, default: Any = 1) -> Any:
     dur = (
         args.get("duration_hours")
         or args.get("duration")
@@ -307,7 +353,7 @@ def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
                 return max(1, min(18, eh - sh))
         except Exception:
             pass
-    raw_slot = str(args.get("time_slot") or "")
+    raw_slot = str(args.get("new_time_slot") or args.get("time_slot") or "")
     if "-" in raw_slot:
         try:
             parts = [p.strip() for p in raw_slot.split("-")]
@@ -317,7 +363,7 @@ def _extract_duration_hours(args: Dict[str, Any], slot: str) -> int:
                 return max(1, min(18, eh - sh))
         except Exception:
             pass
-    return 1
+    return default
 
 
 def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], default_phone: str, default_name: str = "Warga") -> Any:
@@ -371,6 +417,28 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
             customer_name=arguments.get("customer_name")
         )
         return res
+
+    elif tool_name == "reschedule_booking":
+        slot = _extract_slot(arguments)
+        dur = _extract_duration_hours(arguments, slot, default=None)
+        new_court_id = _extract_court_id(
+            arguments.get("new_court_id") if "new_court_id" in arguments else arguments.get("court_id"),
+            default=None
+        )
+        new_date = arguments.get("new_date") or arguments.get("date")
+        c_name = arguments.get("customer_name")
+        res = calendar_service.reschedule_booking(
+            db=db,
+            booking_id=arguments["booking_id"],
+            new_date=new_date,
+            new_time_slot=slot,
+            customer_phone=default_phone,
+            new_court_id=new_court_id,
+            duration_hours=dur,
+            customer_name=c_name
+        )
+        return res.model_dump()
+
 
     elif tool_name == "list_my_bookings":
         res = calendar_service.get_user_bookings(

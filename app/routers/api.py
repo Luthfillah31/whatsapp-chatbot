@@ -8,7 +8,8 @@ from app.models.schemas import (
     DailyScheduleResponse,
     BookingRequest,
     BookingResponse,
-    CancelBookingRequest
+    CancelBookingRequest,
+    RescheduleBookingRequest
 )
 from app.services import calendar_service
 
@@ -44,6 +45,25 @@ def cancel_manual_booking(req: CancelBookingRequest, db: Session = Depends(get_d
     if not res.get("success"):
         raise HTTPException(status_code=400, detail=res.get("message"))
     return res
+
+
+@router.post("/bookings/reschedule", response_model=BookingResponse)
+def reschedule_manual_booking(req: RescheduleBookingRequest, db: Session = Depends(get_db)):
+    """Reschedules an existing booking without requiring a new payment."""
+    res = calendar_service.reschedule_booking(
+        db=db,
+        booking_id=req.booking_id,
+        new_date=req.new_date,
+        new_time_slot=req.new_time_slot,
+        customer_phone=req.customer_phone,
+        new_court_id=req.new_court_id,
+        duration_hours=req.duration_hours,
+        customer_name=req.customer_name
+    )
+    if not res.success:
+        raise HTTPException(status_code=400, detail=res.message)
+    return res
+
 
 
 @router.get("/bookings/{phone}")

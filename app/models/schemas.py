@@ -52,6 +52,17 @@ class CancelBookingRequest(BaseModel):
     customer_phone: str
 
 
+class RescheduleBookingRequest(BaseModel):
+    booking_id: int = Field(..., description="The numeric ID of the booking to reschedule")
+    new_date: Optional[str] = Field(None, description="Optional new target date in YYYY-MM-DD format")
+    new_time_slot: Optional[str] = Field(None, description="Optional new start time slot in HH:MM format")
+    customer_phone: str = Field(..., description="Phone number of the customer for verification")
+    new_court_id: Optional[int] = Field(None, description="Optional new court number (1 or 2)")
+    customer_name: Optional[str] = Field(None, description="Optional customer name for verification")
+    duration_hours: Optional[int] = Field(None, description="Optional duration in hours")
+
+
+
 class ScheduleSlot(BaseModel):
     time: str
     court_1_status: str  # "Available" or "Booked"

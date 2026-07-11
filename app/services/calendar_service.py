@@ -120,7 +120,8 @@ def check_court_availability(
     db: Session, 
     date: str, 
     time_slot: str, 
-    court_id: Optional[int] = None
+    court_id: Optional[int] = None,
+    exclude_booking_id: Optional[int] = None
 ) -> CourtAvailabilityResponse:
     """
     Checks if Court 1 and/or Court 2 are available on the specified date and time slot.
@@ -210,13 +211,15 @@ def check_court_availability(
     except Exception:
         pass
 
-    # Query local database for confirmed and pending bookings that overlap this time slot
-    all_bookings = db.query(Booking).filter(
+    query = db.query(Booking).filter(
         Booking.booking_date == date,
         Booking.start_time <= time_slot,
         Booking.end_time > time_slot,
         Booking.status.in_(["confirmed", "pending_payment"])
-    ).all()
+    )
+    if exclude_booking_id is not None:
+        query = query.filter(Booking.id != exclude_booking_id)
+    all_bookings = query.all()
 
     booked_court_ids = set()
     now_utc = datetime.datetime.now(datetime.timezone.utc)
@@ -308,9 +311,9 @@ def create_booking(
             message="Invalid court number. Please select Court 1 or Court 2."
         )
 
-    if "-" in str(time_slot):
+    if "-" in time_slot:
         try:
-            parts = [p.strip() for p in str(time_slot).split("-")]
+            parts = [p.strip() for p in time_slot.split("-")]
             sh = int(parts[0].split(":")[0])
             eh = int(parts[1].split(":")[0])
             if duration_hours <= 1 and eh > sh:
@@ -443,8 +446,8 @@ def cancel_booking(db: Session, booking_id: Any, customer_phone: str, customer_n
     ).first()
 
     def _phone_match(p1: str, p2: str) -> bool:
-        d1 = re.sub(r'\D', '', str(p1 or ''))
-        d2 = re.sub(r'\D', '', str(p2 or ''))
+        d1 = re.sub(r'\D', '', p1 or '')
+        d2 = re.sub(r'\D', '', p2 or '')
         if not d1 or not d2:
             return False
         return d1[-9:] == d2[-9:]
@@ -496,6 +499,218 @@ def cancel_booking(db: Session, booking_id: Any, customer_phone: str, customer_n
     }
 
 
+def reschedule_booking(
+    db: Session,
+    booking_id: Any,
+    new_date: Optional[str] = None,
+    new_time_slot: Optional[str] = None,
+    customer_phone: str = "",
+    new_court_id: Optional[int] = None,
+    duration_hours: Optional[int] = None,
+    customer_name: Optional[str] = None
+) -> BookingResponse:
+    """
+    Reschedules an existing booking to a new date, time slot, or court without requiring a new payment.
+    Ensures that the new schedule is available and maintains the booking ID and confirmed status.
+    """
+    bid_digits = re.findall(r'\d+', str(booking_id))
+    if not bid_digits:
+        return BookingResponse(
+            success=False,
+            court_id=new_court_id or 1,
+            court_name="Court 1",
+            date=new_date or "",
+            start_time=new_time_slot or "",
+            end_time=new_time_slot or "",
+            status="failed",
+            message=f"ID reservasi tidak valid: {booking_id}"
+        )
+    numeric_id = int(bid_digits[0])
+
+    candidate = db.query(Booking).filter(
+        Booking.id == numeric_id,
+        Booking.status.in_(["confirmed", "pending_payment"])
+    ).first()
+
+    def _phone_match(p1: str, p2: str) -> bool:
+        d1 = re.sub(r'\D', '', p1 or '')
+        d2 = re.sub(r'\D', '', p2 or '')
+        if not d1 or not d2:
+            return False
+        return d1[-9:] == d2[-9:]
+
+    booking = None
+    if candidate:
+        if _phone_match(candidate.customer_phone, customer_phone):
+            booking = candidate
+        elif customer_name and candidate.customer_name.strip().lower() == customer_name.strip().lower():
+            booking = candidate
+            logger.info(f"SECURITY: Booking #{numeric_id} rescheduled via 2-Factor Verification (Name: '{customer_name}').")
+
+    if not booking:
+        return BookingResponse(
+            success=False,
+            court_id=new_court_id or 1,
+            court_name="Court 1",
+            date=new_date or "",
+            start_time=new_time_slot or "",
+            end_time=new_time_slot or "",
+            status="failed",
+            message=f"Tidak ditemukan reservasi aktif dengan ID #{numeric_id} pada nomor Anda atau verifikasi nama tidak cocok."
+        )
+
+    target_court_id = new_court_id if new_court_id in [1, 2] else booking.court_id
+    court_name = settings.COURT_1_NAME if target_court_id == 1 else settings.COURT_2_NAME
+    target_date = new_date.strip() if (new_date and new_date.strip()) else booking.booking_date
+    target_slot = new_time_slot.strip() if (new_time_slot and new_time_slot.strip()) else booking.start_time
+
+    # Validate target date format and prevent past date booking
+    today = get_wib_today()
+    try:
+        booking_date = datetime.date.fromisoformat(target_date)
+    except (ValueError, TypeError):
+        return BookingResponse(
+            success=False,
+            booking_id=booking.id,
+            court_id=target_court_id,
+            court_name=court_name,
+            date=target_date,
+            start_time=str(target_slot),
+            end_time=str(target_slot),
+            status="failed",
+            message=f"Format tanggal '{target_date}' tidak valid. Gunakan format YYYY-MM-DD."
+        )
+
+    if booking_date < today:
+        day_name = get_indonesian_day_name(booking_date)
+        return BookingResponse(
+            success=False,
+            booking_id=booking.id,
+            court_id=target_court_id,
+            court_name=court_name,
+            date=target_date,
+            start_time=str(target_slot),
+            end_time=str(target_slot),
+            status="failed",
+            message=f"Mohon maaf, tanggal {target_date} ({day_name}) sudah lewat. Pemindahan jadwal tidak dapat dilakukan ke tanggal masa lalu."
+        )
+
+    # Determine start time and duration
+    time_slot_str = str(target_slot).strip()
+    parsed_duration = None
+    if "-" in time_slot_str:
+        try:
+            parts = [p.strip() for p in time_slot_str.split("-")]
+            sh = int(parts[0].split(":")[0])
+            eh = int(parts[1].split(":")[0])
+            if eh > sh:
+                parsed_duration = max(1, min(18, eh - sh))
+            time_slot_str = parts[0]
+        except Exception:
+            pass
+
+    old_duration = 1
+    try:
+        sh_old = int(booking.start_time.split(":")[0])
+        eh_old = int(booking.end_time.split(":")[0])
+        if eh_old > sh_old:
+            old_duration = max(1, min(18, eh_old - sh_old))
+    except Exception:
+        pass
+
+    final_duration = duration_hours if (isinstance(duration_hours, int) and 1 <= duration_hours <= 18) else (parsed_duration or old_duration)
+    new_end_time = calculate_end_time(time_slot_str, final_duration)
+
+    # Check availability across consecutive hours excluding current booking
+    for h_offset in range(final_duration):
+        try:
+            slot_dt = datetime.datetime.strptime(time_slot_str, "%H:%M") + datetime.timedelta(hours=h_offset)
+            slot_str = slot_dt.strftime("%H:%M")
+        except Exception:
+            slot_str = time_slot_str
+        avail = check_court_availability(db, target_date, slot_str, target_court_id, exclude_booking_id=booking.id)
+        is_free = avail.court_1_available if target_court_id == 1 else avail.court_2_available
+        if not is_free:
+            return BookingResponse(
+                success=False,
+                booking_id=booking.id,
+                court_id=target_court_id,
+                court_name=court_name,
+                date=target_date,
+                start_time=time_slot_str,
+                end_time=new_end_time,
+                status="failed",
+                message=f"Mohon maaf, untuk jam {slot_str} pada tanggal {target_date} {court_name} tidak tersedia ({avail.summary_text})."
+            )
+
+    old_court_id = booking.court_id
+    booking.court_id = target_court_id
+    booking.booking_date = target_date
+    booking.start_time = time_slot_str
+    booking.end_time = new_end_time
+    booking.status = "confirmed"
+    booking.payment_status = "paid"
+    booking.payment_url = None
+
+    if booking.google_event_id:
+        g_service = get_google_calendar_service()
+        old_cal_id = settings.GOOGLE_CALENDAR_ID_COURT_1 if old_court_id == 1 else settings.GOOGLE_CALENDAR_ID_COURT_2
+        if g_service and old_cal_id:
+            try:
+                cast(Any, g_service).events().delete(calendarId=old_cal_id, eventId=booking.google_event_id).execute()
+            except Exception as e:
+                logger.error(f"Failed to delete old event from Google Calendar during reschedule: {e}")
+            booking.google_event_id = None
+
+    g_service = get_google_calendar_service()
+    cal_id = settings.GOOGLE_CALENDAR_ID_COURT_1 if target_court_id == 1 else settings.GOOGLE_CALENDAR_ID_COURT_2
+    if g_service and cal_id:
+        try:
+            event_body = {
+                'summary': f"🎾 {court_name} - {booking.customer_name}",
+                'description': f"Reserved via WhatsApp Bot (Rescheduled).\nCustomer: {booking.customer_name}\nPhone: {booking.customer_phone}\nPayment Status: Paid",
+                'start': {'dateTime': f"{target_date}T{time_slot_str}:00", 'timeZone': 'UTC'},
+                'end': {'dateTime': f"{target_date}T{new_end_time}:00", 'timeZone': 'UTC'},
+            }
+            created_event = cast(Any, g_service).events().insert(calendarId=cal_id, body=event_body).execute()
+            booking.google_event_id = created_event.get('id')
+        except Exception as e:
+            logger.error(f"Failed to insert event into Google Calendar during reschedule: {e}")
+
+    try:
+        db.commit()
+        db.refresh(booking)
+    except IntegrityError:
+        db.rollback()
+        return BookingResponse(
+            success=False,
+            booking_id=booking.id,
+            court_id=target_court_id,
+            court_name=court_name,
+            date=target_date,
+            start_time=time_slot_str,
+            end_time=new_end_time,
+            status="failed",
+            message=f"Mohon maaf, {court_name} pada tanggal {target_date} jam {time_slot_str} baru saja diproses atau sudah dibooking oleh warga lain."
+        )
+
+    return BookingResponse(
+        success=True,
+        booking_id=booking.id,
+        court_id=target_court_id,
+        court_name=court_name,
+        date=target_date,
+        start_time=time_slot_str,
+        end_time=new_end_time,
+        status="confirmed",
+        payment_url=None,
+        payment_status="paid",
+        total_amount=0,
+        message=f"✅ Jadwal reservasi #{booking.id} berhasil dipindahkan ke {court_name} pada tanggal {target_date} jam {time_slot_str} - {new_end_time} tanpa biaya tambahan (Status: Konfirmasi ✅)."
+    )
+
+
+
 def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
     """Returns all confirmed upcoming bookings for a specific customer phone number."""
     today_str = get_wib_today().strftime("%Y-%m-%d")
@@ -508,7 +723,7 @@ def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = No
         all_active = all_active.filter(Booking.booking_date >= today_str)
 
     bookings = []
-    d_input = re.sub(r'\D', '', str(customer_phone or ''))
+    d_input = re.sub(r'\D', '', customer_phone or '')
     for b in all_active.order_by(Booking.booking_date, Booking.start_time).all():
         d_db = re.sub(r'\D', '', str(b.customer_phone or ''))
         if d_input and d_db and d_input[-9:] == d_db[-9:]:

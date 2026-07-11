@@ -302,3 +302,45 @@ def test_multihour_daily_schedule_grid(test_db):
     assert slot_map["19:00"].court_1_status in ["Pending Payment", "Booked"]
     assert slot_map["18:00"].court_1_customer == "Luthfi"
     assert slot_map["19:00"].court_1_customer == "Luthfi"
+
+
+def test_reschedule_booking_service(test_db):
+    """Verify reschedule_booking service function behaves correctly across courts and slots without extra charge."""
+    res = calendar_service.create_booking(
+        db=test_db,
+        court_id=1,
+        date="2026-07-30",
+        time_slot="18:00",
+        customer_name="Luthfi",
+        customer_phone="+6281395470202",
+        duration_hours=2
+    )
+    assert res.success is True
+    booking_id = res.booking_id
+
+    # 1. Reschedule to Court 2, 19:00 - 21:00
+    resched = calendar_service.reschedule_booking(
+        db=test_db,
+        booking_id=booking_id,
+        new_date="2026-07-30",
+        new_time_slot="19:00",
+        customer_phone="+6281395470202",
+        new_court_id=2
+    )
+    assert resched.success is True
+    assert resched.booking_id == booking_id
+    assert resched.court_id == 2
+    assert resched.start_time == "19:00"
+    assert resched.end_time == "21:00"
+    assert resched.status == "confirmed"
+    assert resched.payment_status == "paid"
+    assert resched.payment_url is None
+    assert resched.total_amount == 0
+
+    # 2. Verify schedule grid reflects movement
+    sched = calendar_service.get_daily_schedule(test_db, "2026-07-30")
+    slot_map = {s.time: s for s in sched.slots}
+    assert slot_map["18:00"].court_1_status == "Available"
+    assert slot_map["19:00"].court_2_status == "Booked"
+    assert slot_map["20:00"].court_2_status == "Booked"
+

@@ -20,13 +20,14 @@ def test_db():
 def test_tools_schema_validity():
     """Verify that all tools defined for OpenRouter follow the required schema format."""
     assert isinstance(TENNIS_TOOLS, list)
-    assert len(TENNIS_TOOLS) == 6
+    assert len(TENNIS_TOOLS) == 7
 
     tool_names = [str(t.get("function", {}).get("name")) for t in TENNIS_TOOLS if isinstance(t, dict) and isinstance(t.get("function"), dict)]
     assert "check_court_availability" in tool_names
     assert "check_calendar_date" in tool_names
     assert "book_court" in tool_names
     assert "cancel_booking" in tool_names
+    assert "reschedule_booking" in tool_names
     assert "list_my_bookings" in tool_names
     assert "find_booking_by_verification" in tool_names
 
@@ -209,4 +210,87 @@ def test_extract_slot_default_empty():
     from app.services.llm_service import _extract_slot
     assert _extract_slot({}) == ""
     assert _extract_slot({"time_slot": "10:00"}) == "10:00"
+
+
+def test_reschedule_booking_tool(test_db):
+    """Verify reschedule_booking moves booking to new slot/court without extra payment."""
+    from app.services.llm_service import execute_tool_call
+    # 1. Create initial booking
+    book_res = execute_tool_call(
+        db=test_db,
+        tool_name="book_court",
+        arguments={
+            "customer_name": "Luthfi",
+            "court_id": 1,
+            "date": "2026-07-20",
+            "time_slot": "18:00",
+            "duration_hours": 2
+        },
+        default_phone="+628123456"
+    )
+    assert book_res["success"] is True
+    booking_id = book_res["booking_id"]
+
+    # 2. Reschedule to court 2 at 19:00 - 21:00
+    resched_res = execute_tool_call(
+        db=test_db,
+        tool_name="reschedule_booking",
+        arguments={
+            "booking_id": booking_id,
+            "new_date": "2026-07-20",
+            "new_time_slot": "19:00",
+            "new_court_id": 2
+        },
+        default_phone="+628123456"
+    )
+    assert resched_res["success"] is True
+    assert resched_res["booking_id"] == booking_id
+    assert resched_res["court_id"] == 2
+    assert resched_res["start_time"] == "19:00"
+    assert resched_res["end_time"] == "21:00"
+    assert resched_res["status"] == "confirmed"
+    assert resched_res["payment_status"] == "paid"
+    assert resched_res["payment_url"] is None
+    assert resched_res["total_amount"] == 0
+
+
+def test_reschedule_booking_partial_args(test_db):
+    """Verify reschedule_booking works with only booking_id and new_court_id (e.g. 'Id 40 ke tennis court 1')."""
+    from app.services.llm_service import execute_tool_call
+    book_res = execute_tool_call(
+        db=test_db,
+        tool_name="book_court",
+        arguments={
+            "customer_name": "Luthfi",
+            "court_id": 2,
+            "date": "2026-07-28",
+            "time_slot": "19:00",
+            "duration_hours": 2
+        },
+        default_phone="+628123456"
+    )
+    assert book_res["success"] is True
+    booking_id = book_res["booking_id"]
+
+    resched_res = execute_tool_call(
+        db=test_db,
+        tool_name="reschedule_booking",
+        arguments={
+            "booking_id": booking_id,
+            "new_court_id": 1
+        },
+        default_phone="+628123456"
+    )
+    assert resched_res["success"] is True
+    assert resched_res["booking_id"] == booking_id
+    assert resched_res["court_id"] == 1
+    assert resched_res["date"] == "2026-07-28"
+    assert resched_res["start_time"] == "19:00"
+    assert resched_res["end_time"] == "21:00"
+    assert resched_res["status"] == "confirmed"
+    assert resched_res["payment_status"] == "paid"
+    assert resched_res["payment_url"] is None
+    assert resched_res["total_amount"] == 0
+
+
 
