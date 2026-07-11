@@ -507,7 +507,8 @@ def process_chat_message(
         "role": "system",
         "content": "PENGINGAT PENTING:\n"
                    "1. Untuk pertanyaan soal jadwal atau reservasi, Anda WAJIB memanggil tool untuk mengambil data terkini dari database. Hasil tool adalah SATU-SATUNYA SUMBER KEBENARAN.\n"
-                   "2. GAYA BAHASA HARUS NETRAL & PROFESIONAL: DILARANG KERAS menggunakan kata-kata bernuansa agama (seperti: Alhamdulillah, Insya Allah, Masya Allah, Puji Tuhan, dll) atau opini/ekspresi berlebihan. Gunakan bahasa Indonesia yang sopan, netral, objektif, dan profesional."
+                   "2. GAYA BAHASA HARUS NETRAL & PROFESIONAL: DILARANG KERAS menggunakan kata-kata bernuansa agama (seperti: Alhamdulillah, Insya Allah, Masya Allah, Puji Tuhan, dll) atau opini/ekspresi berlebihan. Gunakan bahasa Indonesia yang sopan, netral, objektif, dan profesional.\n"
+                   "3. ANTI-HALUSINASI TOOL: Setelah memanggil tool (seperti cancel_booking atau book_court), periksa field 'success' pada hasil tool. Jika 'success' bernilai false, sampaikan pesan error sesuai hasil tool dan JANGAN PERNAH mengatakan reservasi berhasil dibuat atau dibatalkan!"
     })
 
     # Ensure current message is in the list if not already retrieved

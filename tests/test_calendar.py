@@ -254,3 +254,30 @@ def test_create_booking_time_range_inference(test_db):
     assert res.start_time == "15:00"
     assert res.end_time == "18:00"
     assert res.total_amount == 150000
+
+
+def test_cancel_booking_flexible_id_and_phone(test_db):
+    """Verify cancel_booking works even if booking_id is passed as a string with text prefix and phone number has format variations."""
+    res = calendar_service.create_booking(
+        db=test_db,
+        court_id=2,
+        date="2026-07-25",
+        time_slot="15:00",
+        customer_name="Luthfi",
+        customer_phone="+62 813-9547-0202",
+        duration_hours=3
+    )
+    assert res.success is True
+    assert res.booking_id is not None
+
+    # Cancel passing string "ID <id>" and phone without spacing/prefix "+62"
+    cancel_res = calendar_service.cancel_booking(
+        db=test_db,
+        booking_id=f"ID {res.booking_id}",
+        customer_phone="081395470202"
+    )
+    assert cancel_res["success"] is True
+
+    # Check list_my_bookings does not return the cancelled booking
+    my_bookings = calendar_service.get_user_bookings(test_db, customer_phone="6281395470202")
+    assert not any(b["booking_id"] == res.booking_id for b in my_bookings)

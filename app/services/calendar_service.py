@@ -1,5 +1,6 @@
 import os
 import datetime
+import re
 import logging
 from typing import Optional, List, Dict, Any, cast
 from sqlalchemy.orm import Session
@@ -426,47 +427,54 @@ def create_booking(
     )
 
 
-def cancel_booking(db: Session, booking_id: int, customer_phone: str, customer_name: Optional[str] = None) -> Dict[str, Any]:
-    """Cancels an existing reservation by booking ID and customer phone (or verified customer name).
-    
-    SECURITY: Only bookings belonging to `customer_phone` can be cancelled directly.
-    If `customer_name` is provided for 2-factor verification, a booking made under a different
-    phone can be cancelled IF AND ONLY IF the registered name exactly matches (case-insensitive).
-    """
-    booking = db.query(Booking).filter(
-        Booking.id == booking_id,
-        Booking.customer_phone == customer_phone,
+def cancel_booking(db: Session, booking_id: Any, customer_phone: str, customer_name: Optional[str] = None) -> Dict[str, Any]:
+    """Cancels an existing reservation by numeric booking ID and customer phone suffix (or verified customer name)."""
+    bid_digits = re.findall(r'\d+', str(booking_id))
+    if not bid_digits:
+        return {
+            "success": False,
+            "message": f"ID reservasi tidak valid: {booking_id}"
+        }
+    numeric_id = int(bid_digits[0])
+
+    candidate = db.query(Booking).filter(
+        Booking.id == numeric_id,
         Booking.status.in_(["confirmed", "pending_payment"])
     ).first()
 
-    # If not found by direct phone match, check 2-factor verification (name match)
-    if not booking and customer_name:
-        candidate = db.query(Booking).filter(
-            Booking.id == booking_id,
-            Booking.status.in_(["confirmed", "pending_payment"])
-        ).first()
-        if candidate and candidate.customer_name.strip().lower() == customer_name.strip().lower():
+    def _phone_match(p1: str, p2: str) -> bool:
+        d1 = re.sub(r'\D', '', str(p1 or ''))
+        d2 = re.sub(r'\D', '', str(p2 or ''))
+        if not d1 or not d2:
+            return False
+        return d1[-9:] == d2[-9:]
+
+    booking = None
+    if candidate:
+        if _phone_match(candidate.customer_phone, customer_phone):
             booking = candidate
-            logger.info(f"SECURITY: Booking #{booking_id} cancelled via 2-Factor Verification (Name: '{customer_name}').")
+        elif customer_name and candidate.customer_name.strip().lower() == customer_name.strip().lower():
+            booking = candidate
+            logger.info(f"SECURITY: Booking #{numeric_id} cancelled via 2-Factor Verification (Name: '{customer_name}').")
 
     if not booking:
-        # Check if the booking exists under a different phone (for security logging only)
         other_booking = db.query(Booking).filter(
-            Booking.id == booking_id,
+            Booking.id == numeric_id,
             Booking.status.in_(["confirmed", "pending_payment"])
         ).first()
-        if other_booking and other_booking.customer_phone != customer_phone:
+        if other_booking:
             logger.warning(
-                f"SECURITY: Phone {customer_phone} attempted to cancel booking #{booking_id} "
+                f"SECURITY: Phone {customer_phone} attempted to cancel booking #{numeric_id} "
                 f"without valid name verification. Access denied."
             )
         return {
             "success": False,
-            "message": f"Tidak ditemukan reservasi aktif dengan ID #{booking_id} pada nomor Anda atau verifikasi nama tidak cocok."
+            "message": f"Tidak ditemukan reservasi aktif dengan ID #{numeric_id} pada nomor Anda atau verifikasi nama tidak cocok."
         }
 
     # Cancel in local database
     booking.status = "cancelled"
+    booking.payment_status = "cancelled"
     db.commit()
 
     # Remove from Google Calendar if present
@@ -482,26 +490,29 @@ def cancel_booking(db: Session, booking_id: int, customer_phone: str, customer_n
     court_name = settings.COURT_1_NAME if booking.court_id == 1 else settings.COURT_2_NAME
     return {
         "success": True,
-        "message": f"✅ Your reservation #{booking_id} for {court_name} on {booking.booking_date} at {booking.start_time} has been successfully cancelled."
+        "booking_id": numeric_id,
+        "status": "cancelled",
+        "message": f"✅ Reservasi #{numeric_id} untuk {court_name} pada tanggal {booking.booking_date} jam {booking.start_time} - {booking.end_time} berhasil dibatalkan."
     }
 
 
 def get_user_bookings(db: Session, customer_phone: str, date: Optional[str] = None) -> List[Dict[str, Any]]:
-    """Returns all confirmed upcoming bookings for a specific customer phone number.
-    
-    Optionally filters by a specific date. If omitted, returns bookings from today onwards.
-    """
+    """Returns all confirmed upcoming bookings for a specific customer phone number."""
     today_str = get_wib_today().strftime("%Y-%m-%d")
-    query = db.query(Booking).filter(
-        Booking.customer_phone == customer_phone,
+    all_active = db.query(Booking).filter(
         Booking.status.in_(["confirmed", "pending_payment"])
     )
     if date and date.strip():
-        query = query.filter(Booking.booking_date == date.strip())
+        all_active = all_active.filter(Booking.booking_date == date.strip())
     else:
-        query = query.filter(Booking.booking_date >= today_str)
+        all_active = all_active.filter(Booking.booking_date >= today_str)
 
-    bookings = query.order_by(Booking.booking_date, Booking.start_time).all()
+    bookings = []
+    d_input = re.sub(r'\D', '', str(customer_phone or ''))
+    for b in all_active.order_by(Booking.booking_date, Booking.start_time).all():
+        d_db = re.sub(r'\D', '', str(b.customer_phone or ''))
+        if d_input and d_db and d_input[-9:] == d_db[-9:]:
+            bookings.append(b)
 
     results = []
     for b in bookings:
