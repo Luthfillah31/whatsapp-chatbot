@@ -17,6 +17,8 @@ class Settings(BaseSettings):
     CLUB_CLOSING_HOUR: str = "23:00"
     HOURLY_RATE_USD: int = 0
     HOURLY_RATE_IDR: int = 50000
+    CLUB_LOCATION_NAME: str = "Lapangan Tenis Warga Komplek"
+    CLUB_LOCATION_URL: str = "https://share.google/ayEX8An3je8UjCzhi"
 
     # Midtrans Sandbox Configuration
     MIDTRANS_SERVER_KEY: str = ""

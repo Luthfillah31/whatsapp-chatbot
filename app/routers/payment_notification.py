@@ -108,6 +108,7 @@ def handle_midtrans_notification(
                 f"Jam: {booking.start_time} - {booking.end_time} WIB\n"
                 f"Biaya: Rp {total_amount:,}\n"
                 f"Status: *LUNAS* (Diterima oleh Midtrans)\n"
+                f"📍 Lokasi: {settings.CLUB_LOCATION_URL}\n"
                 f"-----------------------------------\n"
                 f"Selamat bermain! 🎾🏡"
             )

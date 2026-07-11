@@ -426,7 +426,7 @@ def create_booking(
         payment_url=p_url,
         payment_status="pending",
         total_amount=total_amount,
-        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {total_amount:,} melalui link ini untuk konfirmasi: {p_url}. Batas waktu pembayaran 10 menit."
+        message=f"Reservasi berhasil dibuat! Silakan lakukan pembayaran Rp {total_amount:,} melalui link ini untuk konfirmasi: {p_url}. Batas waktu pembayaran 10 menit. 📍 Lokasi Lapangan: {settings.CLUB_LOCATION_URL}"
     )
 
 

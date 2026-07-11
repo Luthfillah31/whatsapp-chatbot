@@ -221,6 +221,7 @@ with ctrl_col1:
 with ctrl_col2:
     st.markdown("### ℹ️ Info Operasional Lapangan:")
     st.write(f"**Jam Operasional**: {settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB setiap hari")
+    st.write(f"**📍 Lokasi Google Maps**: [Buka Peta ({settings.CLUB_LOCATION_URL})]({settings.CLUB_LOCATION_URL})")
 
 st.markdown("---")
 
