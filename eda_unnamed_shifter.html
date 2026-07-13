@@ -1,0 +1,357 @@
+<!DOCTYPE html>
+<html lang="id">
+<head>
+    <meta charset="UTF-8">
+    <title>Laporan EDA: Unnamed.Shifter</title>
+    <style>
+        body { font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif; margin: 40px; background-color: #f8fafc; color: #1e293b; }
+        h1 { color: #1d4ed8; border-bottom: 2px solid #e2e8f0; padding-bottom: 10px; }
+        h2 { color: #334155; margin-top: 30px; }
+        .card { background: white; padding: 25px; border-radius: 12px; box-shadow: 0 4px 6px -1px rgba(0,0,0,0.1); margin-bottom: 25px; }
+        table { width: 100%; border-collapse: collapse; margin-top: 15px; }
+        th, td { padding: 12px 15px; text-align: left; border-bottom: 1px solid #e2e8f0; }
+        th { background-color: #f1f5f9; font-weight: 600; color: #475569; }
+        tr:hover { background-color: #f8fafc; }
+        .badge { background: #dbeafe; color: #1e40af; padding: 4px 10px; border-radius: 9999px; font-weight: bold; font-size: 14px; }
+    </style>
+</head>
+<body>
+    <h1>🎾 Laporan Exploratory Data Analysis (EDA): <span class="badge">Unnamed.Shifter</span></h1>
+    
+    <div class="card">
+        <h2>1. Ringkasan Ekstraksi Data</h2>
+        <p>Berhasil memparsing <strong>189 sesi reservasi</strong> dari database SQLite <code>Unnamed.Shifter</code>.</p>
+    </div>
+
+    <div class="card">
+        <h2>2. Perbandingan Volume Lapangan A vs Lapangan B</h2>
+        <table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Lapangan</th>
+      <th>Total Sesi Reservasi</th>
+      <th>Persentase (%)</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Court 1 (Lapangan A)</td>
+      <td>112</td>
+      <td>59.3%</td>
+    </tr>
+    <tr>
+      <td>Court 2 (Lapangan B)</td>
+      <td>77</td>
+      <td>40.7%</td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+    <div class="card">
+        <h2>3. Top 10 Slot Waktu Paling Favorit (Peak Hours)</h2>
+        <table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Slot Jam</th>
+      <th>Jumlah Reservasi</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>79PM</td>
+      <td>23</td>
+    </tr>
+    <tr>
+      <td>46PM</td>
+      <td>22</td>
+    </tr>
+    <tr>
+      <td>79AM</td>
+      <td>20</td>
+    </tr>
+    <tr>
+      <td>68PM</td>
+      <td>19</td>
+    </tr>
+    <tr>
+      <td>57PM</td>
+      <td>15</td>
+    </tr>
+    <tr>
+      <td>68AM</td>
+      <td>14</td>
+    </tr>
+    <tr>
+      <td>67AM</td>
+      <td>11</td>
+    </tr>
+    <tr>
+      <td>810PM</td>
+      <td>10</td>
+    </tr>
+    <tr>
+      <td>35PM</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>45PM</td>
+      <td>6</td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+    <div class="card">
+        <h2>4. Top 15 Pemesan / Coach Teraktif</h2>
+        <table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Nama Pemesan / Coach</th>
+      <th>Total Booking</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>Dika</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>Amelinda</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>Joko</td>
+      <td>7</td>
+    </tr>
+    <tr>
+      <td>Reynaldy</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <td>Putri</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <td>Windy</td>
+      <td>5</td>
+    </tr>
+    <tr>
+      <td>Ervanto</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>Eduardus</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>Wijitro</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>Rizky</td>
+      <td>4</td>
+    </tr>
+    <tr>
+      <td>Ayu</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Marco</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Tamma</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Albert</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>Eason</td>
+      <td>3</td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+    <div class="card">
+        <h2>5. Tren Reservasi Bulanan</h2>
+        <table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Bulan</th>
+      <th>Total Booking</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2025-08</td>
+      <td>6</td>
+    </tr>
+    <tr>
+      <td>2025-09</td>
+      <td>161</td>
+    </tr>
+    <tr>
+      <td>2025-10</td>
+      <td>8</td>
+    </tr>
+    <tr>
+      <td>2025-11</td>
+      <td>3</td>
+    </tr>
+    <tr>
+      <td>2026-02</td>
+      <td>1</td>
+    </tr>
+    <tr>
+      <td>2026-04</td>
+      <td>2</td>
+    </tr>
+    <tr>
+      <td>2026-06</td>
+      <td>5</td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+
+    <div class="card">
+        <h2>6. Sample 20 Data Reservasi Terakhir</h2>
+        <table border="1" class="dataframe">
+  <thead>
+    <tr style="text-align: right;">
+      <th>Tanggal</th>
+      <th>Lapangan</th>
+      <th>Jam</th>
+      <th>Pemesan / Coach</th>
+    </tr>
+  </thead>
+  <tbody>
+    <tr>
+      <td>2025-08-30</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>67AM</td>
+      <td>Marco</td>
+    </tr>
+    <tr>
+      <td>2025-08-30</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>79AM</td>
+      <td>Putri</td>
+    </tr>
+    <tr>
+      <td>2025-08-30</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>46PM</td>
+      <td>Dika</td>
+    </tr>
+    <tr>
+      <td>2025-08-30</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>68AM</td>
+      <td>Kevin</td>
+    </tr>
+    <tr>
+      <td>2025-08-30</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>46PM</td>
+      <td>Sthepanie</td>
+    </tr>
+    <tr>
+      <td>2025-08-30</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>89PM</td>
+      <td>Marco</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>67AM</td>
+      <td>Amelinda</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>79AM</td>
+      <td>Christian</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>46PM</td>
+      <td>Dika</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>68PM</td>
+      <td>Reynaldy</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>810PM</td>
+      <td>Olin</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>45PM</td>
+      <td>Fanie</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>57PM</td>
+      <td>NAB-Yoshepine</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>79PM</td>
+      <td>NAB Melisa</td>
+    </tr>
+    <tr>
+      <td>2025-09-01</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>911PM</td>
+      <td>NAB Eason</td>
+    </tr>
+    <tr>
+      <td>2025-09-02</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>79AM</td>
+      <td>Ayu</td>
+    </tr>
+    <tr>
+      <td>2025-09-02</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>46PM</td>
+      <td>Coach Dika</td>
+    </tr>
+    <tr>
+      <td>2025-09-02</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>68PM</td>
+      <td>NAB-Agatha</td>
+    </tr>
+    <tr>
+      <td>2025-09-02</td>
+      <td>Court 1 (Lapangan A)</td>
+      <td>810PM</td>
+      <td>NAB-Chikko</td>
+    </tr>
+    <tr>
+      <td>2025-09-02</td>
+      <td>Court 2 (Lapangan B)</td>
+      <td>68AM</td>
+      <td>Coach Rahmad</td>
+    </tr>
+  </tbody>
+</table>
+    </div>
+</body>
+</html>
