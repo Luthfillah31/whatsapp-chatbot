@@ -103,7 +103,7 @@ def handle_midtrans_notification(
                 f"-----------------------------------\n"
                 f"ID Booking: #{booking.id}\n"
                 f"Nama: {booking.customer_name}\n"
-                f"Lapangan: {'Tennis Court 1' if booking.court_id == 1 else 'Tennis Court 2'}\n"
+                f"Lapangan: {settings.COURT_1_NAME if booking.court_id == 1 else settings.COURT_2_NAME}\n"
                 f"Tanggal: {booking.booking_date}\n"
                 f"Jam: {booking.start_time} - {booking.end_time} WIB\n"
                 f"Biaya: Rp {total_amount:,}\n"

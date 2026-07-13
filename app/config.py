@@ -11,8 +11,8 @@ class Settings(BaseSettings):
     OPENROUTER_BASE_URL: str = "https://openrouter.ai/api/v1"
 
     # Tennis Courts Configuration
-    COURT_1_NAME: str = "Tennis Court 1"
-    COURT_2_NAME: str = "Tennis Court 2"
+    COURT_1_NAME: str = "Lapangan A"
+    COURT_2_NAME: str = "Lapangan B"
     CLUB_OPENING_HOUR: str = "05:00"
     CLUB_CLOSING_HOUR: str = "23:00"
     HOURLY_RATE_USD: int = 0

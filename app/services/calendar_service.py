@@ -331,12 +331,12 @@ def create_booking(
         return BookingResponse(
             success=False,
             court_id=court_id,
-            court_name=f"Court {court_id}",
+            court_name=f"Lapangan {court_id}",
             date=date,
             start_time=time_slot,
             end_time=time_slot,
             status="failed",
-            message="Invalid court number. Please select Court 1 or Court 2."
+            message=f"Pilihan lapangan tidak valid. Silakan pilih {settings.COURT_1_NAME} (1) atau {settings.COURT_2_NAME} (2)."
         )
 
     if "-" in time_slot:

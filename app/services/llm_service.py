@@ -25,7 +25,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "check_court_availability",
-            "description": "Check if Tennis Court 1 and/or Court 2 are available on a specific date and time.",
+            "description": "Check if Lapangan A (court_id=1) and/or Lapangan B (court_id=2) are available on a specific date and time.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -250,7 +250,7 @@ INFORMASI PENTING KOMPLEK PERUMAHAN:
 - Biaya & Tarif Sewa Lapangan:
   * Jam Pagi - Sore (05:00 - 17:00 WIB): Rp 75.000 / jam
   * Jam Malam (17:00 - 23:00 WIB): Rp 80.000 / jam
-- Fasilitas: '{settings.COURT_1_NAME}' dan '{settings.COURT_2_NAME}'.
+- Fasilitas: '{settings.COURT_1_NAME}' (court_id=1) dan '{settings.COURT_2_NAME}' (court_id=2). Gunakan sebutan Lapangan A dan Lapangan B saat menjawab warga.
 
 IDENTITAS PENGGUNA AKTIF:
 - ID Kontak warga saat ini: {sender_phone}
