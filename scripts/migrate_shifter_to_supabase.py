@@ -15,51 +15,50 @@ if PROJECT_ROOT not in sys.path:
 
 from app.models.db_models import SessionLocal, Booking
 
-def parse_time_slot(slot_str):
-    clean = slot_str.upper().replace(" ", "").replace("-", "")
-    m = re.match(r"^(\d+)([AP]M)$", clean)
-    if not m:
-        return None, None
-    digits = m.group(1)
-    ampm = m.group(2)
-
+def parse_time_slot_enhanced(digits, ampm, current_period="AM"):
+    period = (ampm or current_period).upper()
     start_h = None
     end_h = None
 
-    if len(digits) == 2:
-        start_h = int(digits[0])
-        end_h = int(digits[1])
-    elif len(digits) == 3:
-        if digits.startswith("810"):
+    clean_digits = digits.replace("-", "").replace(":", "")
+
+    if len(clean_digits) == 2:
+        start_h = int(clean_digits[0])
+        end_h = int(clean_digits[1])
+    elif len(clean_digits) == 3:
+        if clean_digits.startswith("810"):
             start_h, end_h = 8, 10
-        elif digits.startswith("911"):
+        elif clean_digits.startswith("911"):
             start_h, end_h = 9, 11
-        elif digits.startswith("710"):
+        elif clean_digits.startswith("710"):
             start_h, end_h = 7, 10
-        elif digits.startswith("610"):
+        elif clean_digits.startswith("610"):
             start_h, end_h = 6, 10
         else:
-            start_h = int(digits[:1])
-            end_h = int(digits[1:])
-    elif len(digits) == 4:
-        start_h = int(digits[:2])
-        end_h = int(digits[2:])
-
-    if start_h is None or end_h is None:
+            start_h = int(clean_digits[:1])
+            end_h = int(clean_digits[1:])
+    elif len(clean_digits) == 4:
+        start_h = int(clean_digits[:2])
+        end_h = int(clean_digits[2:])
+    else:
         return None, None
 
-    if ampm == "PM":
+    if period in ["PM", "P", "SORE", "MALAM"]:
         if start_h < 12:
             start_h += 12
         if end_h < 12:
             end_h += 12
-    elif ampm == "AM":
+    elif period in ["AM", "A", "PAGI"]:
         if start_h == 12:
             start_h = 0
         if end_h == 12:
             end_h = 0
 
+    if start_h > 23 or end_h > 24 or start_h >= end_h:
+        return None, None
+
     return f"{start_h:02d}:00", f"{end_h:02d}:00"
+
 
 def extract_bookings_from_shifter(db_path="Unnamed.Shifter"):
     conn = sqlite3.connect(db_path)
@@ -73,7 +72,10 @@ def extract_bookings_from_shifter(db_path="Unnamed.Shifter"):
         raw_date = str(int(fecha))
         if len(raw_date) != 8:
             continue
-        dt_str = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}"
+        y = int(raw_date[:4])
+        m = int(raw_date[4:6]) + 1
+        d = int(raw_date[6:])
+        dt_str = f"{y:04d}-{m:02d}-{d:02d}"
 
         text = html.unescape(re.sub(r'<[^>]+>', '\n', notas))
         current_court = 1
@@ -106,40 +108,42 @@ def extract_bookings_from_shifter(db_path="Unnamed.Shifter"):
                 current_period = "PM"
                 continue
 
-            m1 = re.search(r'^(\d{1,2}\s*[-:]?\s*\d{1,2})\s*([APap][Mm])[:\s\-]+(.*)$', line_clean)
+            m1 = re.search(r'^([ABab]-?)?(\d{1,2}\s*[-:]?\s*\d{1,2})\s*([APap][Mm]?|AM|PM)?\s*[-:]*\s*([A-Za-z].*)$', line_clean)
             if m1:
-                digits = m1.group(1).replace(" ", "").replace("-", "")
-                ampm = m1.group(2).upper()
-                name = m1.group(3).strip('- :')
-                if name:
-                    start_t, end_t = parse_time_slot(digits + ampm)
-                    if start_t and end_t:
-                        parsed_bookings.append({
-                            "booking_date": dt_str,
-                            "court_id": current_court,
-                            "start_time": start_t,
-                            "end_time": end_t,
-                            "customer_name": name,
-                            "customer_phone": "0800-MIGRATED-SHIFTER",
-                            "status": "confirmed",
-                            "payment_status": "paid",
-                            "google_event_id": "MIGRATED_FROM_SHIFTER"
-                        })
-                continue
-
-            m2 = re.search(r'^([ABab]-)?(\d{2,4})[-:\s]+([A-Za-z].*)$', line_clean)
-            if m2:
-                court_pref = m2.group(1)
-                digits = m2.group(2)
-                name = m2.group(3).strip('- :')
-                court_to_use = 2 if (court_pref and 'B' in court_pref.upper()) else current_court
-                start_t, end_t = parse_time_slot(digits + current_period)
-                if start_t and end_t:
+                c_pref = m1.group(1)
+                digits = m1.group(2)
+                ampm = m1.group(3)
+                name = m1.group(4).strip('- :')
+                c_id = 2 if (c_pref and 'B' in c_pref.upper()) else (1 if (c_pref and 'A' in c_pref.upper()) else current_court)
+                st, et = parse_time_slot_enhanced(digits, ampm, current_period)
+                if st and et and name:
                     parsed_bookings.append({
                         "booking_date": dt_str,
-                        "court_id": court_to_use,
-                        "start_time": start_t,
-                        "end_time": end_t,
+                        "court_id": c_id,
+                        "start_time": st,
+                        "end_time": et,
+                        "customer_name": name,
+                        "customer_phone": "0800-MIGRATED-SHIFTER",
+                        "status": "confirmed",
+                        "payment_status": "paid",
+                        "google_event_id": "MIGRATED_FROM_SHIFTER"
+                    })
+                    continue
+
+            m2 = re.search(r'^([ABab]-?)?(\d{2,4})\s*([APap][Mm]?|AM|PM)?\s*([A-Za-z].*)$', line_clean)
+            if m2:
+                c_pref = m2.group(1)
+                digits = m2.group(2)
+                ampm = m2.group(3)
+                name = m2.group(4).strip('- :')
+                c_id = 2 if (c_pref and 'B' in c_pref.upper()) else (1 if (c_pref and 'A' in c_pref.upper()) else current_court)
+                st, et = parse_time_slot_enhanced(digits, ampm, current_period)
+                if st and et and name:
+                    parsed_bookings.append({
+                        "booking_date": dt_str,
+                        "court_id": c_id,
+                        "start_time": st,
+                        "end_time": et,
                         "customer_name": name,
                         "customer_phone": "0800-MIGRATED-SHIFTER",
                         "status": "confirmed",
