@@ -282,9 +282,9 @@ html_table = f"""
             <tr>
                 <th style="width: 15%">⏰ Slot Waktu</th>
                 <th style="width: 20%">🎾 {settings.COURT_1_NAME}</th>
-                <th style="width: 25%">👤 Pemesan Lap. 1</th>
+                <th style="width: 25%">👤 Pemesan Lap. A</th>
                 <th style="width: 20%">🎾 {settings.COURT_2_NAME}</th>
-                <th style="width: 25%">👤 Pemesan Lap. 2</th>
+                <th style="width: 25%">👤 Pemesan Lap. B</th>
             </tr>
         </thead>
         <tbody>
