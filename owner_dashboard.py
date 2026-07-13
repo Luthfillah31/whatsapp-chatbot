@@ -201,7 +201,6 @@ st.markdown("""
 st.markdown("""
 <div class="header-banner">
     <div class="header-title">🎾 Sistem Reservasi Lapangan Tennis GBM</div>
-    <div class="header-subtitle">Dashboard Pengurus & Monitoring Jadwal Lapangan Tennis GBM</div>
 </div>
 """, unsafe_allow_html=True)
 
@@ -270,6 +269,78 @@ with col3:
     """, unsafe_allow_html=True)
 
 st.markdown("<br>", unsafe_allow_html=True)
+
+# Owner Editing Mode Section
+edit_mode = st.toggle("🛠️ Masuk Mode Edit Jadwal Owner (Hapus / Pindah Reservasi)", value=False, help="Aktifkan untuk memodifikasi, memindahkan (reschedule), atau menghapus reservasi.")
+
+if edit_mode:
+    st.markdown("""
+    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; border-radius: 12px; padding: 1.2rem; margin-bottom: 1.5rem;">
+        <h4 style="color: #10b981; margin:0;">🛠️ Mode Edit Owner Aktif</h4>
+        <p style="color: #e2e8f0; font-size: 0.9rem; margin: 4px 0 0 0;">Pilih pesanan di bawah untuk memindahkan jadwal (reschedule) atau menghapus dari sistem secara langsung.</p>
+    </div>
+    """, unsafe_allow_html=True)
+    
+    db_edit = SessionLocal()
+    try:
+        from app.models.db_models import Booking
+        active_bookings = db_edit.query(Booking).filter(
+            Booking.booking_date == date_str,
+            Booking.status != "cancelled"
+        ).order_by(Booking.start_time, Booking.court_id).all()
+        
+        if not active_bookings:
+            st.info("ℹ️ Tidak ada reservasi aktif pada tanggal ini untuk diedit.")
+        else:
+            tab_move, tab_delete = st.tabs(["↔️ Pindahkan Jadwal (Move / Reschedule)", "🗑️ Hapus Reservasi (Delete)"])
+            
+            booking_options = {
+                f"ID #{b.id} | Lapangan {b.court_id} | {b.start_time}-{b.end_time} | {b.customer_name}": b.id
+                for b in active_bookings
+            }
+            
+            with tab_move:
+                st.markdown("##### Pindahkan Reservasi ke Jam atau Lapangan Lain")
+                selected_move_label = st.selectbox("Pilih Reservasi yang Akan Dipindahkan:", list(booking_options.keys()), key="select_move")
+                selected_move_id = booking_options[selected_move_label]
+                
+                mcol1, mcol2 = st.columns(2)
+                with mcol1:
+                    new_court = st.selectbox("Pilih Lapangan Tujuan:", [1, 2], format_func=lambda x: f"Lapangan {'A' if x==1 else 'B'} (Tennis Court {x})", key="move_court")
+                with mcol2:
+                    time_options = [f"{h:02d}:00" for h in range(settings.CLUB_OPENING_HOUR, settings.CLUB_CLOSING_HOUR)]
+                    new_start_time = st.selectbox("Pilih Jam Mulai Baru:", time_options, key="move_time")
+                
+                if st.button("↔️ Eksekusi Pindah Jadwal", type="primary", key="btn_move"):
+                    target_b = db_edit.query(Booking).filter(Booking.id == selected_move_id).first()
+                    if target_b:
+                        sh = int(target_b.start_time.split(":")[0])
+                        eh = int(target_b.end_time.split(":")[0])
+                        dur = max(1, eh - sh)
+                        new_sh = int(new_start_time.split(":")[0])
+                        new_eh = min(settings.CLUB_CLOSING_HOUR, new_sh + dur)
+                        target_b.court_id = new_court
+                        target_b.start_time = f"{new_sh:02d}:00"
+                        target_b.end_time = f"{new_eh:02d}:00"
+                        db_edit.commit()
+                        st.success(f"✅ Reservasi #{target_b.id} ({target_b.customer_name}) berhasil dipindahkan ke Lapangan {new_court} pukul {target_b.start_time}-{target_b.end_time}!")
+                        st.rerun()
+            
+            with tab_delete:
+                st.markdown("##### Hapus Reservasi dari Jadwal")
+                selected_del_label = st.selectbox("Pilih Reservasi yang Akan Dihapus:", list(booking_options.keys()), key="select_del")
+                selected_del_id = booking_options[selected_del_label]
+                
+                st.warning("⚠️ Perhatian: Menghapus reservasi akan langsung mengosongkan slot lapangan pada tanggal ini.")
+                if st.button("🗑️ Hapus Reservasi Sekarang", type="primary", key="btn_delete"):
+                    del_b = db_edit.query(Booking).filter(Booking.id == selected_del_id).first()
+                    if del_b:
+                        db_edit.delete(del_b)
+                        db_edit.commit()
+                        st.success(f"🗑️ Reservasi #{selected_del_id} berhasil dihapus dari sistem!")
+                        st.rerun()
+    finally:
+        db_edit.close()
 
 # Schedule Table Section
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")

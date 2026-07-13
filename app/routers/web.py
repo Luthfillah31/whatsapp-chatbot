@@ -74,3 +74,56 @@ def serve_privacy_policy():
     """
     return HTMLResponse(content=html_content)
 
+
+from pydantic import BaseModel
+from app.models.db_models import SessionLocal, Booking
+
+
+class MoveBookingRequest(BaseModel):
+    court_id: int
+    start_time: str
+    end_time: str | None = None
+
+
+@router.delete("/api/admin/bookings/{booking_id}")
+def delete_booking(booking_id: int):
+    """Admin endpoint to delete a booking."""
+    db = SessionLocal()
+    try:
+        booking = db.query(Booking).filter(Booking.id == booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+        db.delete(booking)
+        db.commit()
+        return {"status": "success", "message": f"Booking #{booking_id} deleted"}
+    finally:
+        db.close()
+
+
+@router.post("/api/admin/bookings/{booking_id}/move")
+def move_booking(booking_id: int, req: MoveBookingRequest):
+    """Admin endpoint to move/reschedule a booking via Drag & Drop."""
+    db = SessionLocal()
+    try:
+        booking = db.query(Booking).filter(Booking.id == booking_id).first()
+        if not booking:
+            raise HTTPException(status_code=404, detail="Booking not found")
+
+        sh = int(booking.start_time.split(":")[0])
+        eh = int(booking.end_time.split(":")[0])
+        dur = max(1, eh - sh)
+        new_sh = int(req.start_time.split(":")[0])
+        new_eh = new_sh + dur
+
+        booking.court_id = req.court_id
+        booking.start_time = f"{new_sh:02d}:00"
+        booking.end_time = f"{new_eh:02d}:00"
+        db.commit()
+        return {
+            "status": "success",
+            "message": f"Booking #{booking_id} moved to Court {req.court_id} {booking.start_time}-{booking.end_time}",
+        }
+    finally:
+        db.close()
+
+
