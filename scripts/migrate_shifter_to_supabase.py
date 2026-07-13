@@ -159,48 +159,68 @@ def run_migration(dry_run=False):
     bookings_to_migrate = extract_bookings_from_shifter(shifter_path)
     print(f"Berhasil memparsing {len(bookings_to_migrate)} sesi reservasi dari Unnamed.Shifter.")
 
+    def to_min(t):
+        parts = t.split(":")
+        return int(parts[0]) * 60 + int(parts[1])
+
+    def overlaps(s1, e1, s2, e2):
+        return max(s1, s2) < min(e1, e2)
+
+    occupied = {}
+
+    def is_court_free(dt, c_id, s_min, e_min):
+        court_intervals = occupied.get(dt, {}).get(c_id, [])
+        for os_min, oe_min, _ in court_intervals:
+            if overlaps(s_min, e_min, os_min, oe_min):
+                return False
+        return True
+
+    def occupy_court(dt, c_id, s_min, e_min, name):
+        occupied.setdefault(dt, {}).setdefault(c_id, []).append((s_min, e_min, name))
+
     unique_bookings = []
-    seen = set()
+
     for b in bookings_to_migrate:
         dt = b["booking_date"]
         c_id = b["court_id"]
         st = b["start_time"]
         et = b["end_time"]
+        name = b["customer_name"]
 
-        key = (dt, c_id, st)
-        if key not in seen:
-            seen.add(key)
+        s_min, e_min = to_min(st), to_min(et)
+
+        # 1. Try preferred court
+        if is_court_free(dt, c_id, s_min, e_min):
+            occupy_court(dt, c_id, s_min, e_min, name)
             unique_bookings.append(b)
         else:
-            # Smart Collision Resolution: Try opposite court at same time
+            # 2. Try opposite court
             alt_court = 3 - c_id
-            alt_key = (dt, alt_court, st)
-            if alt_key not in seen:
+            if is_court_free(dt, alt_court, s_min, e_min):
                 b_copy = dict(b)
                 b_copy["court_id"] = alt_court
-                seen.add(alt_key)
+                occupy_court(dt, alt_court, s_min, e_min, name)
                 unique_bookings.append(b_copy)
             else:
-                # Try PM (+12h) if morning slot
+                # 3. Try PM (+12h) if morning slot
                 sh = int(st.split(":")[0])
                 eh = int(et.split(":")[0])
                 if sh < 12:
                     pm_st = f"{sh+12:02d}:00"
                     pm_et = f"{eh+12:02d}:00"
-                    pm_key1 = (dt, c_id, pm_st)
-                    pm_key2 = (dt, alt_court, pm_st)
-                    if pm_key1 not in seen:
+                    pm_s_min, pm_e_min = to_min(pm_st), to_min(pm_et)
+                    if is_court_free(dt, c_id, pm_s_min, pm_e_min):
                         b_copy = dict(b)
                         b_copy["start_time"] = pm_st
                         b_copy["end_time"] = pm_et
-                        seen.add(pm_key1)
+                        occupy_court(dt, c_id, pm_s_min, pm_e_min, name)
                         unique_bookings.append(b_copy)
-                    elif pm_key2 not in seen:
+                    elif is_court_free(dt, alt_court, pm_s_min, pm_e_min):
                         b_copy = dict(b)
                         b_copy["court_id"] = alt_court
                         b_copy["start_time"] = pm_st
                         b_copy["end_time"] = pm_et
-                        seen.add(pm_key2)
+                        occupy_court(dt, alt_court, pm_s_min, pm_e_min, name)
                         unique_bookings.append(b_copy)
 
     print(f"Setelah Smart Collision Resolution: {len(unique_bookings)} sesi unik siap diimpor.")
@@ -210,25 +230,23 @@ def run_migration(dry_run=False):
 
     db = SessionLocal()
     try:
-        # Fetch existing keys in ONE query
-        existing_rows = db.query(Booking.court_id, Booking.booking_date, Booking.start_time).all()
-        existing_keys = set(existing_rows)
+        # Clean up existing SHIFTER_MIGRATION rows so we don't keep legacy overlapping records
+        deleted_count = db.query(Booking).filter(Booking.customer_phone == "0800-MIGRATED-SHIFTER").delete()
+        print(f"Membersihkan {deleted_count} data migrasi lama sebelum impor baru...")
 
         to_insert = []
         for item in unique_bookings:
-            k = (item["court_id"], item["booking_date"], item["start_time"])
-            if k not in existing_keys:
-                to_insert.append(Booking(
-                    court_id=item["court_id"],
-                    customer_phone=item["customer_phone"],
-                    customer_name=item["customer_name"],
-                    booking_date=item["booking_date"],
-                    start_time=item["start_time"],
-                    end_time=item["end_time"],
-                    status=item["status"],
-                    payment_status=item["payment_status"],
-                    google_event_id=item["google_event_id"]
-                ))
+            to_insert.append(Booking(
+                court_id=item["court_id"],
+                customer_phone=item["customer_phone"],
+                customer_name=item["customer_name"],
+                booking_date=item["booking_date"],
+                start_time=item["start_time"],
+                end_time=item["end_time"],
+                status=item["status"],
+                payment_status=item["payment_status"],
+                google_event_id=item["google_event_id"]
+            ))
 
         if to_insert:
             db.bulk_save_objects(to_insert)
