@@ -272,7 +272,7 @@ def check_court_availability(
         pass
 
     try:
-        duration_hours = max(1, int(duration_hours))
+        duration_hours = max(1, duration_hours)
     except (ValueError, TypeError):
         duration_hours = 1
     req_end_time = calculate_end_time(time_slot, duration_hours)

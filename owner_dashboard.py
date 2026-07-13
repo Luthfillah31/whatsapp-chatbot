@@ -234,7 +234,7 @@ if action in ["move", "delete"]:
         if action == "move":
             booking_id = int(st.query_params.get("id", 0))
             new_court = int(st.query_params.get("court", 1))
-            new_time = str(st.query_params.get("time", "07:00") or "07:00")
+            new_time = st.query_params.get("time", "07:00") or "07:00"
             end_h = int(new_time.split(":")[0]) + 1
             new_end = f"{end_h:02d}:00"
             b = db_act.query(Booking).filter(Booking.id == booking_id).first()
