@@ -384,40 +384,44 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
 # Schedule Table Header & Control
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
+if "edit_mode" not in st.session_state:
+    st.session_state.edit_mode = False
+
 st.markdown("""
 <style>
-/* Mega Full-Width Toggle Banner Box */
-div[data-testid="stToggle"] {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.35), rgba(30, 58, 138, 0.65));
-    border: 3.5px solid #60a5fa;
-    border-radius: 20px;
-    padding: 32px 40px !important;
-    margin: 20px 0 30px 0 !important;
-    box-shadow: 0 12px 35px rgba(59, 130, 246, 0.45);
-    width: 100%;
-}
-/* Mega Label Text */
-div[data-testid="stToggle"] label p {
-    font-size: 2.15rem !important;
+/* Style for our Giant Action Button */
+div.stButton > button {
+    min-height: 105px !important;
+    width: 100% !important;
+    font-size: 1.65rem !important;
     font-weight: 900 !important;
+    border-radius: 20px !important;
+    padding: 26px 34px !important;
+    box-shadow: 0 10px 30px rgba(37, 99, 235, 0.45) !important;
+    letter-spacing: 0.8px !important;
+    line-height: 1.4 !important;
+    background: linear-gradient(135deg, #2563eb, #1e40af) !important;
     color: #ffffff !important;
-    letter-spacing: 0.8px;
-    line-height: 1.3;
+    border: 3.5px solid #60a5fa !important;
 }
-/* Mega Scaled Toggle Switch */
-div[data-testid="stToggle"] input + div {
-    transform: scale(2.4) !important;
-    transform-origin: left center !important;
-    margin-right: 32px !important;
+div.stButton > button:hover {
+    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
+    border-color: #93c5fd !important;
+    transform: scale(1.01) !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-edit_mode = st.toggle(
-    "🛠️ KLIK DI SINI — AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)",
-    value=False,
-    help="Aktifkan sakelar ini untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi."
-)
+if not st.session_state.edit_mode:
+    if st.button("🛠️ KLIK DI SINI : MASUK KE MODE EDIT OWNER (DRAG & DROP JADWAL)", use_container_width=True):
+        st.session_state.edit_mode = True
+        st.rerun()
+else:
+    if st.button("❌ KELUAR DARI MODE EDIT OWNER (KEMBALI KE MODE LIHAT JADWAL)", use_container_width=True):
+        st.session_state.edit_mode = False
+        st.rerun()
+
+edit_mode = st.session_state.edit_mode
 
 if not edit_mode:
     # Construct Custom HTML Table (Read-Only Mode)
