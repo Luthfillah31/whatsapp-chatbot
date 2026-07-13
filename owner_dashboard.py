@@ -234,7 +234,7 @@ if action in ["move", "delete"]:
         if action == "move":
             booking_id = int(st.query_params.get("id", 0))
             new_court = int(st.query_params.get("court", 1))
-            new_time = st.query_params.get("time", "")
+            new_time = str(st.query_params.get("time", "07:00") or "07:00")
             end_h = int(new_time.split(":")[0]) + 1
             new_end = f"{end_h:02d}:00"
             b = db_act.query(Booking).filter(Booking.id == booking_id).first()
@@ -356,7 +356,8 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
             db_mov = SessionLocal()
             try:
                 from app.models.db_models import Booking
-                end_h = int(new_time.split(":")[0]) + 1
+                safe_time = str(new_time or "07:00")
+                end_h = int(safe_time.split(":")[0]) + 1
                 new_end = f"{end_h:02d}:00"
 
                 existing = db_mov.query(Booking).filter(
@@ -381,11 +382,33 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 db_mov.close()
 
 # Schedule Table Header & Control
-head_col1, head_col2 = st.columns([3, 1])
+head_col1, head_col2 = st.columns([2.3, 1.7])
 with head_col1:
     st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 with head_col2:
-    edit_mode = st.toggle("🛠️ Mode Edit Owner", value=False, help="Aktifkan untuk menampilkan tombol Hapus & Pindah Jadwal di dalam kolom Pemesan.")
+    st.markdown("""
+    <style>
+    /* Size up Edit Mode toggle & button container */
+    div[data-testid="stToggle"] {
+        background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(30, 64, 175, 0.25));
+        border: 1.5px solid rgba(96, 165, 250, 0.5);
+        border-radius: 12px;
+        padding: 12px 20px;
+        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
+    }
+    div[data-testid="stToggle"] label p {
+        font-size: 1.15rem !important;
+        font-weight: 700 !important;
+        color: #93c5fd !important;
+        letter-spacing: 0.3px;
+    }
+    </style>
+    """, unsafe_allow_html=True)
+    edit_mode = st.toggle(
+        "🛠️ AKTIFKAN MODE EDIT OWNER (DRAG & DROP)",
+        value=False,
+        help="Aktifkan untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi secara langsung."
+    )
 
 if not edit_mode:
     # Construct Custom HTML Table (Read-Only Mode)
