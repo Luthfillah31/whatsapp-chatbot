@@ -382,33 +382,41 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 db_mov.close()
 
 # Schedule Table Header & Control
-head_col1, head_col2 = st.columns([2.3, 1.7])
-with head_col1:
-    st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
-with head_col2:
-    st.markdown("""
-    <style>
-    /* Size up Edit Mode toggle & button container */
-    div[data-testid="stToggle"] {
-        background: linear-gradient(135deg, rgba(59, 130, 246, 0.18), rgba(30, 64, 175, 0.25));
-        border: 1.5px solid rgba(96, 165, 250, 0.5);
-        border-radius: 12px;
-        padding: 12px 20px;
-        box-shadow: 0 4px 12px rgba(59, 130, 246, 0.15);
-    }
-    div[data-testid="stToggle"] label p {
-        font-size: 1.15rem !important;
-        font-weight: 700 !important;
-        color: #93c5fd !important;
-        letter-spacing: 0.3px;
-    }
-    </style>
-    """, unsafe_allow_html=True)
-    edit_mode = st.toggle(
-        "🛠️ AKTIFKAN MODE EDIT OWNER (DRAG & DROP)",
-        value=False,
-        help="Aktifkan untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi secara langsung."
-    )
+st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
+
+st.markdown("""
+<style>
+/* Giant Full-Width Toggle Banner Box */
+div[data-testid="stToggle"] {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(30, 58, 138, 0.45));
+    border: 2.5px solid #3b82f6;
+    border-radius: 16px;
+    padding: 22px 30px !important;
+    margin: 15px 0 25px 0 !important;
+    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.3);
+    width: 100%;
+}
+/* Giant Label Text */
+div[data-testid="stToggle"] label p {
+    font-size: 1.65rem !important;
+    font-weight: 800 !important;
+    color: #ffffff !important;
+    letter-spacing: 0.5px;
+}
+/* Giant Scaled Toggle Switch */
+div[data-testid="stToggle"] input + div {
+    transform: scale(1.8) !important;
+    transform-origin: left center !important;
+    margin-right: 24px !important;
+}
+</style>
+""", unsafe_allow_html=True)
+
+edit_mode = st.toggle(
+    "🛠️ KLIK DI SINI — AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)",
+    value=False,
+    help="Aktifkan sakelar ini untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi."
+)
 
 if not edit_mode:
     # Construct Custom HTML Table (Read-Only Mode)
