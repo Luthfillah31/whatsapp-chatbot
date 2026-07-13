@@ -45,6 +45,34 @@ def get_indonesian_day_name(dt: datetime.date) -> str:
     return INDONESIAN_DAYS.get(dt.strftime("%A"), dt.strftime("%A"))
 
 
+def get_slot_hourly_rate(time_slot: str) -> int:
+    """Return hourly rate based on start time slot (05:00-17:00 = 75.000, 17:00-23:00 = 80.000)."""
+    try:
+        hour = int(str(time_slot).split(":")[0])
+        if hour >= 17:
+            return getattr(settings, "HOURLY_RATE_EVENING_IDR", 80000)
+        else:
+            return getattr(settings, "HOURLY_RATE_DAYTIME_IDR", 75000)
+    except Exception:
+        return settings.HOURLY_RATE_IDR
+
+
+def calculate_total_booking_price(start_time: str, duration_hours: int) -> int:
+    """Calculate total price summing up hourly rate for each hour."""
+    total = 0
+    try:
+        start_h = int(str(start_time).split(":")[0])
+        for offset in range(duration_hours):
+            h = start_h + offset
+            if h >= 17:
+                total += getattr(settings, "HOURLY_RATE_EVENING_IDR", 80000)
+            else:
+                total += getattr(settings, "HOURLY_RATE_DAYTIME_IDR", 75000)
+        return total
+    except Exception:
+        return duration_hours * settings.HOURLY_RATE_IDR
+
+
 # Try importing Google API client libraries
 try:
     from google.oauth2 import service_account
@@ -264,7 +292,7 @@ def check_court_availability(
 
     # If specific court was requested, adjust summary text
     day_name = get_indonesian_day_name(booking_date)
-    rate = settings.HOURLY_RATE_IDR
+    rate = get_slot_hourly_rate(time_slot)
     cal_alert = f"[PENGINGAT KALENDER: Tanggal {date} adalah HARI {day_name.upper()}. Jika pengguna menyebut hari lain seperti Senin/Selasa, Anda WAJIB memberi tahu bahwa {date} adalah Hari {day_name}.]\n"
     if court_id == 1:
         status_text = f"tersedia (Rp {rate:,}/jam)" if c1_avail else "SUDAH TERISI"
@@ -397,7 +425,7 @@ def create_booking(
 
     # Generate payment transaction details
     bid = cast(int, new_booking.id)
-    total_amount = duration_hours * settings.HOURLY_RATE_IDR
+    total_amount = calculate_total_booking_price(time_slot, duration_hours)
     payment_info = payment_service.create_midtrans_transaction(
         booking_id=bid,
         amount=total_amount,

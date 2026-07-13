@@ -95,7 +95,7 @@ def handle_midtrans_notification(
                 dur = max(1, eh - sh)
             except Exception:
                 dur = 1
-            total_amount = dur * settings.HOURLY_RATE_IDR
+            total_amount = calendar_service.calculate_total_booking_price(str(booking.start_time), dur)
 
             receipt_text = (
                 f"🧾 *KUITANSI PEMBAYARAN RESMI* 🧾\n\n"

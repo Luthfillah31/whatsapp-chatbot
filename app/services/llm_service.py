@@ -247,7 +247,9 @@ def get_system_prompt(sender_phone: str) -> str:
 INFORMASI PENTING KOMPLEK PERUMAHAN:
 - Hari & Tanggal Hari Ini: Hari {today_day}, {today_str}
 - Jam Operasional: {settings.CLUB_OPENING_HOUR} hingga {settings.CLUB_CLOSING_HOUR} WIB setiap hari.
-- Biaya & Tarif: Rp {settings.HOURLY_RATE_IDR:,} per jam.
+- Biaya & Tarif Sewa Lapangan:
+  * Jam Pagi - Sore (05:00 - 17:00 WIB): Rp 75.000 / jam
+  * Jam Malam (17:00 - 23:00 WIB): Rp 80.000 / jam
 - Fasilitas: '{settings.COURT_1_NAME}' dan '{settings.COURT_2_NAME}'.
 
 IDENTITAS PENGGUNA AKTIF:

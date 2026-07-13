@@ -172,6 +172,6 @@ def test_multihour_receipt_amount(test_db):
         customer_phone="+628123",
         duration_hours=2
     )
-    assert res.total_amount == 100000
-    assert "100,000" in res.message
+    assert res.total_amount == 150000
+    assert "150,000" in res.message
 

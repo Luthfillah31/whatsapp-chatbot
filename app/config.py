@@ -16,7 +16,9 @@ class Settings(BaseSettings):
     CLUB_OPENING_HOUR: str = "05:00"
     CLUB_CLOSING_HOUR: str = "23:00"
     HOURLY_RATE_USD: int = 0
-    HOURLY_RATE_IDR: int = 50000
+    HOURLY_RATE_DAYTIME_IDR: int = 75000  # 05:00 - 17:00
+    HOURLY_RATE_EVENING_IDR: int = 80000  # 17:00 - 23:00
+    HOURLY_RATE_IDR: int = 75000  # Default daytime rate
     CLUB_LOCATION_NAME: str = "Sistem Reservasi Lapangan Tennis GBM"
     CLUB_LOCATION_URL: str = "https://share.google/ayEX8An3je8UjCzhi"
 

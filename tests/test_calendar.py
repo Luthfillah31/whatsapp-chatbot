@@ -253,7 +253,7 @@ def test_create_booking_time_range_inference(test_db):
     assert res.success is True
     assert res.start_time == "15:00"
     assert res.end_time == "18:00"
-    assert res.total_amount == 150000
+    assert res.total_amount == 230000
 
 
 def test_cancel_booking_flexible_id_and_phone(test_db):
