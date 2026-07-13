@@ -384,44 +384,45 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
 # Schedule Table Header & Control
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
-if "edit_mode" not in st.session_state:
-    st.session_state.edit_mode = False
-
 st.markdown("""
 <style>
-/* Style for our Giant Action Button */
-div.stButton > button {
-    min-height: 105px !important;
+/* Ultra-Massive Full-Width Toggle Banner Box */
+div[data-testid="stToggle"] {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.4), rgba(30, 58, 138, 0.75)) !important;
+    border: 4px solid #60a5fa !important;
+    border-radius: 24px !important;
+    padding: 40px 50px !important;
+    margin: 25px 0 35px 0 !important;
+    box-shadow: 0 16px 45px rgba(59, 130, 246, 0.6) !important;
     width: 100% !important;
-    font-size: 1.65rem !important;
-    font-weight: 900 !important;
-    border-radius: 20px !important;
-    padding: 26px 34px !important;
-    box-shadow: 0 10px 30px rgba(37, 99, 235, 0.45) !important;
-    letter-spacing: 0.8px !important;
-    line-height: 1.4 !important;
-    background: linear-gradient(135deg, #2563eb, #1e40af) !important;
-    color: #ffffff !important;
-    border: 3.5px solid #60a5fa !important;
+    min-height: 120px !important;
+    display: flex !important;
+    align-items: center !important;
 }
-div.stButton > button:hover {
-    background: linear-gradient(135deg, #3b82f6, #2563eb) !important;
-    border-color: #93c5fd !important;
-    transform: scale(1.01) !important;
+/* Ultra-Massive 48px Label Text */
+div[data-testid="stToggle"] label,
+div[data-testid="stToggle"] label p,
+div[data-testid="stToggle"] label span {
+    font-size: 48px !important;
+    font-weight: 900 !important;
+    color: #ffffff !important;
+    letter-spacing: 1px !important;
+    line-height: 1.25 !important;
+}
+/* Ultra-Massive Scaled Toggle Switch */
+div[data-testid="stToggle"] input + div {
+    transform: scale(3.5) !important;
+    transform-origin: left center !important;
+    margin-right: 55px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-if not st.session_state.edit_mode:
-    if st.button("🛠️ KLIK DI SINI : MASUK KE MODE EDIT OWNER (DRAG & DROP JADWAL)", use_container_width=True):
-        st.session_state.edit_mode = True
-        st.rerun()
-else:
-    if st.button("❌ KELUAR DARI MODE EDIT OWNER (KEMBALI KE MODE LIHAT JADWAL)", use_container_width=True):
-        st.session_state.edit_mode = False
-        st.rerun()
-
-edit_mode = st.session_state.edit_mode
+edit_mode = st.toggle(
+    "🛠️ KLIK DI SINI — AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)",
+    value=False,
+    help="Aktifkan sakelar ini untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi."
+)
 
 if not edit_mode:
     # Construct Custom HTML Table (Read-Only Mode)
