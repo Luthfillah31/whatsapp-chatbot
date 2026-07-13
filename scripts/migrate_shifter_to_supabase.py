@@ -162,12 +162,48 @@ def run_migration(dry_run=False):
     unique_bookings = []
     seen = set()
     for b in bookings_to_migrate:
-        key = (b["court_id"], b["booking_date"], b["start_time"])
+        dt = b["booking_date"]
+        c_id = b["court_id"]
+        st = b["start_time"]
+        et = b["end_time"]
+
+        key = (dt, c_id, st)
         if key not in seen:
             seen.add(key)
             unique_bookings.append(b)
+        else:
+            # Smart Collision Resolution: Try opposite court at same time
+            alt_court = 3 - c_id
+            alt_key = (dt, alt_court, st)
+            if alt_key not in seen:
+                b_copy = dict(b)
+                b_copy["court_id"] = alt_court
+                seen.add(alt_key)
+                unique_bookings.append(b_copy)
+            else:
+                # Try PM (+12h) if morning slot
+                sh = int(st.split(":")[0])
+                eh = int(et.split(":")[0])
+                if sh < 12:
+                    pm_st = f"{sh+12:02d}:00"
+                    pm_et = f"{eh+12:02d}:00"
+                    pm_key1 = (dt, c_id, pm_st)
+                    pm_key2 = (dt, alt_court, pm_st)
+                    if pm_key1 not in seen:
+                        b_copy = dict(b)
+                        b_copy["start_time"] = pm_st
+                        b_copy["end_time"] = pm_et
+                        seen.add(pm_key1)
+                        unique_bookings.append(b_copy)
+                    elif pm_key2 not in seen:
+                        b_copy = dict(b)
+                        b_copy["court_id"] = alt_court
+                        b_copy["start_time"] = pm_st
+                        b_copy["end_time"] = pm_et
+                        seen.add(pm_key2)
+                        unique_bookings.append(b_copy)
 
-    print(f"Setelah menghapus duplikasi internal: {len(unique_bookings)} sesi unik siap diimpor.")
+    print(f"Setelah Smart Collision Resolution: {len(unique_bookings)} sesi unik siap diimpor.")
 
     if dry_run:
         return True
