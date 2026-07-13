@@ -384,39 +384,32 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
 # Schedule Table Header & Control
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
+if "edit_mode" not in st.session_state:
+    st.session_state.edit_mode = False
+
 st.markdown("""
 <style>
-/* Giant Full-Width Toggle Banner Box */
-div[data-testid="stToggle"] {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.28), rgba(30, 58, 138, 0.45));
-    border: 2.5px solid #3b82f6;
-    border-radius: 16px;
-    padding: 22px 30px !important;
+/* Make the hero toggle button truly GIGANTIC */
+div.stButton > button {
+    height: 90px !important;
+    font-size: 1.85rem !important;
+    font-weight: 900 !important;
+    border-radius: 20px !important;
+    border: 3px solid #60a5fa !important;
+    box-shadow: 0 10px 35px rgba(59, 130, 246, 0.45) !important;
+    letter-spacing: 1px !important;
+    text-transform: uppercase !important;
     margin: 15px 0 25px 0 !important;
-    box-shadow: 0 8px 30px rgba(59, 130, 246, 0.3);
-    width: 100%;
-}
-/* Giant Label Text */
-div[data-testid="stToggle"] label p {
-    font-size: 1.65rem !important;
-    font-weight: 800 !important;
-    color: #ffffff !important;
-    letter-spacing: 0.5px;
-}
-/* Giant Scaled Toggle Switch */
-div[data-testid="stToggle"] input + div {
-    transform: scale(1.8) !important;
-    transform-origin: left center !important;
-    margin-right: 24px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-edit_mode = st.toggle(
-    "🛠️ KLIK DI SINI — AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)",
-    value=False,
-    help="Aktifkan sakelar ini untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi."
-)
+btn_label = "❌ KELUAR DARI MODE EDIT OWNER" if st.session_state.edit_mode else "🛠️ KLIK DI SINI : AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)"
+if st.button(btn_label, type="primary", use_container_width=True):
+    st.session_state.edit_mode = not st.session_state.edit_mode
+    st.rerun()
+
+edit_mode = st.session_state.edit_mode
 
 if not edit_mode:
     # Construct Custom HTML Table (Read-Only Mode)
