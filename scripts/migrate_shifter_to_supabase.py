@@ -43,7 +43,7 @@ def parse_time_slot_enhanced(digits, ampm, current_period="AM"):
     else:
         return None, None
 
-    if period in ["PM", "P", "SORE", "MALAM"]:
+    if period in ["PM", "P", "SORE", "MALAM"] or start_h < 5:
         if start_h < 12:
             start_h += 12
         if end_h < 12:
