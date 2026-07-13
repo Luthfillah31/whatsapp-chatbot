@@ -384,32 +384,40 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
 # Schedule Table Header & Control
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
-if "edit_mode" not in st.session_state:
-    st.session_state.edit_mode = False
-
 st.markdown("""
 <style>
-/* Make the hero toggle button truly GIGANTIC */
-div.stButton > button {
-    height: 90px !important;
-    font-size: 1.85rem !important;
+/* Mega Full-Width Toggle Banner Box */
+div[data-testid="stToggle"] {
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.35), rgba(30, 58, 138, 0.65));
+    border: 3.5px solid #60a5fa;
+    border-radius: 20px;
+    padding: 32px 40px !important;
+    margin: 20px 0 30px 0 !important;
+    box-shadow: 0 12px 35px rgba(59, 130, 246, 0.45);
+    width: 100%;
+}
+/* Mega Label Text */
+div[data-testid="stToggle"] label p {
+    font-size: 2.15rem !important;
     font-weight: 900 !important;
-    border-radius: 20px !important;
-    border: 3px solid #60a5fa !important;
-    box-shadow: 0 10px 35px rgba(59, 130, 246, 0.45) !important;
-    letter-spacing: 1px !important;
-    text-transform: uppercase !important;
-    margin: 15px 0 25px 0 !important;
+    color: #ffffff !important;
+    letter-spacing: 0.8px;
+    line-height: 1.3;
+}
+/* Mega Scaled Toggle Switch */
+div[data-testid="stToggle"] input + div {
+    transform: scale(2.4) !important;
+    transform-origin: left center !important;
+    margin-right: 32px !important;
 }
 </style>
 """, unsafe_allow_html=True)
 
-btn_label = "❌ KELUAR DARI MODE EDIT OWNER" if st.session_state.edit_mode else "🛠️ KLIK DI SINI : AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)"
-if st.button(btn_label, type="primary", use_container_width=True):
-    st.session_state.edit_mode = not st.session_state.edit_mode
-    st.rerun()
-
-edit_mode = st.session_state.edit_mode
+edit_mode = st.toggle(
+    "🛠️ KLIK DI SINI — AKTIFKAN MODE EDIT OWNER (DRAG & DROP JADWAL)",
+    value=False,
+    help="Aktifkan sakelar ini untuk memindahkan jadwal dengan Drag & Drop atau menghapus reservasi."
+)
 
 if not edit_mode:
     # Construct Custom HTML Table (Read-Only Mode)
