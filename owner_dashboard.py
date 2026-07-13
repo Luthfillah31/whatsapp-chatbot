@@ -1,4 +1,5 @@
 import streamlit as st
+import streamlit.components.v1 as components
 import datetime
 import pandas as pd
 from app.models.db_models import SessionLocal
@@ -224,6 +225,37 @@ with ctrl_col2:
 
 st.markdown("---")
 
+# Handle Drag & Drop / Direct Actions triggered via query parameters
+action = st.query_params.get("action")
+if action in ["move", "delete"]:
+    db_act = SessionLocal()
+    try:
+        from app.models.db_models import Booking
+        if action == "move":
+            booking_id = int(st.query_params.get("id", 0))
+            new_court = int(st.query_params.get("court", 1))
+            new_time = st.query_params.get("time", "")
+            end_h = int(new_time.split(":")[0]) + 1
+            new_end = f"{end_h:02d}:00"
+            b = db_act.query(Booking).filter(Booking.id == booking_id).first()
+            if b:
+                b.court_id = new_court
+                b.start_time = new_time
+                b.end_time = new_end
+                db_act.commit()
+                st.toast(f"✅ Jadwal {b.customer_name} berhasil dipindahkan ke Lapangan {new_court} ({new_time})!")
+        elif action == "delete":
+            booking_id = int(st.query_params.get("id", 0))
+            b = db_act.query(Booking).filter(Booking.id == booking_id).first()
+            if b:
+                db_act.delete(b)
+                db_act.commit()
+                st.toast("🗑️ Reservasi berhasil dihapus!")
+    finally:
+        db_act.close()
+        st.query_params.clear()
+        st.rerun()
+
 # Fetch Schedule Data from Local Database
 db = SessionLocal()
 try:
@@ -411,53 +443,316 @@ if not edit_mode:
     st.markdown(html_table.replace("\n", "").replace("\r", "").strip(), unsafe_allow_html=True)
 
 else:
-    # Interactive Owner Editing Grid Table
-    st.info("🛠️ **Mode Edit Owner Aktif**: Klik tombol **🗑️ Hapus** atau **↔️ Pindah (Drag/Reschedule)** langsung di dalam kolom pemesan untuk mengelola jadwal.")
-    
-    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1.1, 1.2, 2.7, 1.2, 2.7])
-    col_h1.markdown("**⏰ Slot Waktu**")
-    col_h2.markdown(f"**🎾 {settings.COURT_1_NAME}**")
-    col_h3.markdown("**👤 Pemesan & Aksi Lap. A**")
-    col_h4.markdown(f"**🎾 {settings.COURT_2_NAME}**")
-    col_h5.markdown("**👤 Pemesan & Aksi Lap. B**")
-    st.markdown("---")
+    # Interactive HTML5 Drag and Drop Schedule Board
+    st.info("🛠️ **Mode Edit Owner Aktif (Drag & Drop Interaktif)**: Tekan & tahan kartu reservasi, geser (drag), lalu lepas (drop) ke slot waktu/lapangan yang diinginkan. Anda juga dapat menekan tombol **🗑️ Hapus**.")
 
+    import json
+    slots_json = []
     for s in slots:
-        c1, c2, c3, c4, c5 = st.columns([1.1, 1.2, 2.7, 1.2, 2.7])
-        c1.markdown(f"`{s.time}`")
-        
-        # Court 1 Status
-        status_c1_label = "🟢 Tersedia" if s.court_1_status == "Available" else ("🟡 Pending" if s.court_1_status == "Pending Payment" else "🔴 Terpesan")
-        c2.markdown(status_c1_label)
+        slots_json.append({
+            "time": s.time,
+            "c1_status": s.court_1_status,
+            "c1_id": s.court_1_booking_id,
+            "c1_customer": s.court_1_customer or "Customer",
+            "c2_status": s.court_2_status,
+            "c2_id": s.court_2_booking_id,
+            "c2_customer": s.court_2_customer or "Customer",
+        })
 
-        # Court 1 Pemesan & Action Buttons inside cell
-        with c3:
-            if s.court_1_status != "Available" and s.court_1_booking_id:
-                st.markdown(f"**👤 {s.court_1_customer}**")
-                b1, b2 = st.columns(2)
-                if b1.button("🗑️ Hapus", key=f"del_c1_{s.time}_{s.court_1_booking_id}", use_container_width=True):
-                    show_delete_dialog(s.court_1_booking_id, s.court_1_customer or "Customer", settings.COURT_1_NAME, s.time)
-                if b2.button("↔️ Pindah", key=f"mov_c1_{s.time}_{s.court_1_booking_id}", use_container_width=True):
-                    show_move_dialog(s.court_1_booking_id, s.court_1_customer or "Customer", 1, s.time, date_str)
-            else:
-                st.markdown("*-*")
+    dnd_html = f"""
+    <!DOCTYPE html>
+    <html>
+    <head>
+    <style>
+      @import url('https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700&display=swap');
+      body {{
+        font-family: 'Inter', sans-serif;
+        background: #0f172a;
+        color: #f1f5f9;
+        margin: 0;
+        padding: 0;
+      }}
+      .board-table {{
+        width: 100%;
+        border-collapse: collapse;
+      }}
+      .board-table th {{
+        background: #1e293b;
+        padding: 14px;
+        font-size: 0.85rem;
+        text-transform: uppercase;
+        color: #94a3b8;
+        border-bottom: 2px solid rgba(255,255,255,0.1);
+        text-align: left;
+      }}
+      .board-table td {{
+        padding: 12px;
+        border-bottom: 1px solid rgba(255,255,255,0.05);
+        vertical-align: middle;
+      }}
+      .time-badge {{
+        background: rgba(96,165,250,0.15);
+        color: #60a5fa;
+        padding: 6px 12px;
+        border-radius: 6px;
+        font-weight: 700;
+        font-size: 0.95rem;
+      }}
+      .drop-zone {{
+        min-height: 48px;
+        border: 2px dashed rgba(255,255,255,0.1);
+        border-radius: 8px;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #10b981;
+        background: rgba(16,185,129,0.05);
+        font-size: 0.85rem;
+        font-weight: 600;
+        transition: all 0.2s;
+      }}
+      .drop-zone.drag-over {{
+        border-color: #60a5fa;
+        background: rgba(96,165,250,0.2);
+        transform: scale(1.02);
+      }}
+      .drag-card {{
+        background: linear-gradient(135deg, #1e293b, #334155);
+        border: 1px solid #475569;
+        border-radius: 8px;
+        padding: 10px 14px;
+        cursor: grab;
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        box-shadow: 0 4px 6px rgba(0,0,0,0.3);
+        transition: transform 0.15s;
+      }}
+      .drag-card:active {{
+        cursor: grabbing;
+      }}
+      .drag-card:hover {{
+        border-color: #60a5fa;
+      }}
+      .card-info {{
+        font-weight: 600;
+        font-size: 0.95rem;
+        color: #f8fafc;
+      }}
+      .drag-hint {{
+        font-size: 0.75rem;
+        color: #94a3b8;
+        display: block;
+      }}
+      .btn-del {{
+        background: rgba(239,68,68,0.2);
+        color: #ef4444;
+        border: 1px solid rgba(239,68,68,0.3);
+        padding: 6px 10px;
+        border-radius: 6px;
+        font-weight: 600;
+        cursor: pointer;
+      }}
+      .btn-del:hover {{
+        background: #ef4444;
+        color: white;
+      }}
+      .modal-overlay {{
+        position: fixed;
+        top: 0; left: 0; right: 0; bottom: 0;
+        background: rgba(0,0,0,0.75);
+        display: none;
+        align-items: center;
+        justify-content: center;
+        z-index: 9999;
+      }}
+      .modal-box {{
+        background: #1e293b;
+        border: 1px solid #475569;
+        border-radius: 12px;
+        padding: 24px;
+        max-width: 420px;
+        width: 90%;
+        box-shadow: 0 10px 25px rgba(0,0,0,0.5);
+      }}
+      .modal-box h3 {{
+        margin-top: 0;
+        color: #60a5fa;
+      }}
+      .modal-buttons {{
+        display: flex;
+        gap: 12px;
+        margin-top: 20px;
+      }}
+      .btn-confirm {{
+        flex: 1;
+        background: #3b82f6;
+        color: white;
+        border: none;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }}
+      .btn-cancel {{
+        flex: 1;
+        background: #334155;
+        color: #cbd5e1;
+        border: none;
+        padding: 10px;
+        border-radius: 8px;
+        font-weight: 600;
+        cursor: pointer;
+      }}
+    </style>
+    </head>
+    <body>
+      <table class="board-table">
+        <thead>
+          <tr>
+            <th style="width: 14%">⏰ Slot Waktu</th>
+            <th style="width: 43%">🎾 {settings.COURT_1_NAME}</th>
+            <th style="width: 43%">🎾 {settings.COURT_2_NAME}</th>
+          </tr>
+        </thead>
+        <tbody id="boardBody"></tbody>
+      </table>
 
-        # Court 2 Status
-        status_c2_label = "🟢 Tersedia" if s.court_2_status == "Available" else ("🟡 Pending" if s.court_2_status == "Pending Payment" else "🔴 Terpesan")
-        c4.markdown(status_c2_label)
+      <!-- Modal -->
+      <div id="modalOverlay" class="modal-overlay">
+        <div class="modal-box">
+          <h3 id="modalTitle">Konfirmasi Pindah Jadwal</h3>
+          <p id="modalDesc"></p>
+          <div class="modal-buttons">
+            <button class="btn-cancel" onclick="closeModal()">❌ Batal</button>
+            <button id="btnConfirm" class="btn-confirm">✅ Ya, Pindahkan</button>
+          </div>
+        </div>
+      </div>
 
-        # Court 2 Pemesan & Action Buttons inside cell
-        with c5:
-            if s.court_2_status != "Available" and s.court_2_booking_id:
-                st.markdown(f"**👤 {s.court_2_customer}**")
-                b3, b4 = st.columns(2)
-                if b3.button("🗑️ Hapus", key=f"del_c2_{s.time}_{s.court_2_booking_id}", use_container_width=True):
-                    show_delete_dialog(s.court_2_booking_id, s.court_2_customer or "Customer", settings.COURT_2_NAME, s.time)
-                if b4.button("↔️ Pindah", key=f"mov_c2_{s.time}_{s.court_2_booking_id}", use_container_width=True):
-                    show_move_dialog(s.court_2_booking_id, s.court_2_customer or "Customer", 2, s.time, date_str)
-            else:
-                st.markdown("*-*")
+      <script>
+        const slots = {json.dumps(slots_json)};
+        let activeAction = null;
 
-        st.markdown("<hr style='margin: 4px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+        function renderBoard() {{
+          const tbody = document.getElementById("boardBody");
+          tbody.innerHTML = "";
+          slots.forEach(s => {{
+            const tr = document.createElement("tr");
+            tr.innerHTML = `<td><span class="time-badge">${{s.time}}</span></td>`;
+
+            const td1 = document.createElement("td");
+            td1.appendChild(renderCell(s.c1_status, s.c1_id, s.c1_customer, 1, s.time));
+            tr.appendChild(td1);
+
+            const td2 = document.createElement("td");
+            td2.appendChild(renderCell(s.c2_status, s.c2_id, s.c2_customer, 2, s.time));
+            tr.appendChild(td2);
+
+            tbody.appendChild(tr);
+          }});
+        }}
+
+        function renderCell(status, id, customer, courtId, time) {{
+          if (status !== "Available" && id) {{
+            const card = document.createElement("div");
+            card.className = "drag-card";
+            card.draggable = true;
+            card.ondragstart = (e) => dragStart(e, id, customer, courtId, time);
+            card.innerHTML = `
+              <div>
+                <span class="card-info">👤 ${{customer}}</span>
+                <span class="drag-hint">✋ Tekan & geser untuk pindah</span>
+              </div>
+              <button class="btn-del" onclick="showDeleteModal(${{id}}, '${{customer}}', ${{courtId}}, '${{time}}')">🗑️ Hapus</button>
+            `;
+            return card;
+          }} else {{
+            const zone = document.createElement("div");
+            zone.className = "drop-zone";
+            zone.ondragover = (e) => dragOver(e, zone);
+            zone.ondragleave = (e) => dragLeave(e, zone);
+            zone.ondrop = (e) => dropSlot(e, zone, courtId, time);
+            zone.innerHTML = "🟢 Tersedia (Lepas di sini)";
+            return zone;
+          }}
+        }}
+
+        let draggedData = null;
+
+        function dragStart(e, id, customer, oldCourt, oldTime) {{
+          draggedData = {{ id, customer, oldCourt, oldTime }};
+          e.dataTransfer.effectAllowed = "move";
+        }}
+
+        function dragOver(e, el) {{
+          e.preventDefault();
+          el.classList.add("drag-over");
+        }}
+
+        function dragLeave(e, el) {{
+          el.classList.remove("drag-over");
+        }}
+
+        function dropSlot(e, el, newCourt, newTime) {{
+          e.preventDefault();
+          el.classList.remove("drag-over");
+          if (!draggedData) return;
+          if (draggedData.oldCourt === newCourt && draggedData.oldTime === newTime) return;
+
+          activeAction = {{
+            type: "move",
+            id: draggedData.id,
+            newCourt: newCourt,
+            newTime: newTime
+          }};
+
+          const courtName = newCourt === 1 ? "Lap. A" : "Lap. B";
+          const oldCourtName = draggedData.oldCourt === 1 ? "Lap. A" : "Lap. B";
+          document.getElementById("modalTitle").innerText = "↔️ Konfirmasi Pindah Jadwal";
+          document.getElementById("modalDesc").innerHTML = `
+            Apakah Anda yakin ingin memindahkan reservasi ini?<br><br>
+            👤 <b>Pemesan</b>: ${{draggedData.customer}}<br>
+            📍 <b>Dari</b>: ${{oldCourtName}} (${{draggedData.oldTime}})<br>
+            🎯 <b>Ke</b>: ${{courtName}} (${{newTime}})
+          `;
+          document.getElementById("btnConfirm").innerText = "✅ Ya, Pindahkan";
+          document.getElementById("modalOverlay").style.display = "flex";
+        }}
+
+        function showDeleteModal(id, customer, courtId, time) {{
+          const courtName = courtId === 1 ? "Lap. A" : "Lap. B";
+          activeAction = {{ type: "delete", id: id }};
+          document.getElementById("modalTitle").innerText = "⚠️ Konfirmasi Hapus Reservasi";
+          document.getElementById("modalDesc").innerHTML = `
+            Apakah Anda yakin ingin menghapus reservasi ini secara permanen?<br><br>
+            👤 <b>Pemesan</b>: ${{customer}}<br>
+            📍 <b>Jadwal</b>: ${{courtName}} (${{time}})
+          `;
+          document.getElementById("btnConfirm").innerText = "🗑️ Ya, Hapus";
+          document.getElementById("modalOverlay").style.display = "flex";
+        }}
+
+        function closeModal() {{
+          document.getElementById("modalOverlay").style.display = "none";
+          activeAction = null;
+        }}
+
+        document.getElementById("btnConfirm").onclick = function() {{
+          if (!activeAction) return;
+          if (activeAction.type === "move") {{
+            window.parent.location.search = "?action=move&id=" + activeAction.id + "&court=" + activeAction.newCourt + "&time=" + activeAction.newTime;
+          }} else if (activeAction.type === "delete") {{
+            window.parent.location.search = "?action=delete&id=" + activeAction.id;
+          }}
+        }};
+
+        renderBoard();
+      </script>
+    </body>
+    </html>
+    """
+
+    components.html(dnd_html, height=750, scrolling=True)
 
 
