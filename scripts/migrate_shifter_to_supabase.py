@@ -14,7 +14,6 @@ if PROJECT_ROOT not in sys.path:
     sys.path.insert(0, PROJECT_ROOT)
 
 from app.models.db_models import SessionLocal, Booking
-from sqlalchemy.exc import IntegrityError
 
 def parse_time_slot(slot_str):
     clean = slot_str.upper().replace(" ", "").replace("-", "")
@@ -72,45 +71,82 @@ def extract_bookings_from_shifter(db_path="Unnamed.Shifter"):
     parsed_bookings = []
     for fecha, notas in rows:
         raw_date = str(int(fecha))
-        if len(raw_date) == 8:
-            dt_str = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}"
-        else:
+        if len(raw_date) != 8:
             continue
+        dt_str = f"{raw_date[:4]}-{raw_date[4:6]}-{raw_date[6:]}"
 
         text = html.unescape(re.sub(r'<[^>]+>', '\n', notas))
-        current_court_id = 1
+        current_court = 1
+        current_period = "AM"
 
         for line in text.split('\n'):
             line_clean = line.strip()
             if not line_clean:
                 continue
+            up = line_clean.upper()
 
-            upper_line = line_clean.upper()
-            if 'LAP B' in upper_line or 'LAPANGAN B' in upper_line or upper_line == 'B' or upper_line == 'LAP B':
-                current_court_id = 2
+            if up in ['LAP B', 'LAPANGAN B', 'COURT 2', 'COURT B', 'B']:
+                current_court = 2
                 continue
-            elif 'LAP A' in upper_line or 'LAPANGAN A' in upper_line or upper_line == 'A' or upper_line == 'LAP A':
-                current_court_id = 1
+            if up in ['LAP A', 'LAPANGAN A', 'COURT 1', 'COURT A', 'A']:
+                current_court = 1
+                continue
+            if up == 'PM-A':
+                current_court = 1
+                current_period = "PM"
+                continue
+            if up == 'PM-B':
+                current_court = 2
+                current_period = "PM"
+                continue
+            if up in ['AM', 'PAGI']:
+                current_period = "AM"
+                continue
+            if up in ['PM', 'SORE', 'MALAM']:
+                current_period = "PM"
                 continue
 
-            m = re.search(r'^(\d{1,2}\s*[-:]?\s*\d{0,2}\s*[APap][Mm]|\d{1,2}\s*[-:]\s*\d{1,2})[:\s\-]+(.*)$', line_clean)
-            if m:
-                slot_str = m.group(1).upper().replace(' ', '')
-                customer = m.group(2).strip('- :')
-                if customer and len(customer) > 1 and not customer.upper().startswith('LAP'):
-                    start_t, end_t = parse_time_slot(slot_str)
+            m1 = re.search(r'^(\d{1,2}\s*[-:]?\s*\d{1,2})\s*([APap][Mm])[:\s\-]+(.*)$', line_clean)
+            if m1:
+                digits = m1.group(1).replace(" ", "").replace("-", "")
+                ampm = m1.group(2).upper()
+                name = m1.group(3).strip('- :')
+                if name:
+                    start_t, end_t = parse_time_slot(digits + ampm)
                     if start_t and end_t:
                         parsed_bookings.append({
                             "booking_date": dt_str,
-                            "court_id": current_court_id,
+                            "court_id": current_court,
                             "start_time": start_t,
                             "end_time": end_t,
-                            "customer_name": customer,
+                            "customer_name": name,
                             "customer_phone": "0800-MIGRATED-SHIFTER",
                             "status": "confirmed",
                             "payment_status": "paid",
                             "google_event_id": "MIGRATED_FROM_SHIFTER"
                         })
+                continue
+
+            m2 = re.search(r'^([ABab]-)?(\d{2,4})[-:\s]+([A-Za-z].*)$', line_clean)
+            if m2:
+                court_pref = m2.group(1)
+                digits = m2.group(2)
+                name = m2.group(3).strip('- :')
+                court_to_use = 2 if (court_pref and 'B' in court_pref.upper()) else current_court
+                start_t, end_t = parse_time_slot(digits + current_period)
+                if start_t and end_t:
+                    parsed_bookings.append({
+                        "booking_date": dt_str,
+                        "court_id": court_to_use,
+                        "start_time": start_t,
+                        "end_time": end_t,
+                        "customer_name": name,
+                        "customer_phone": "0800-MIGRATED-SHIFTER",
+                        "status": "confirmed",
+                        "payment_status": "paid",
+                        "google_event_id": "MIGRATED_FROM_SHIFTER"
+                    })
+
     return parsed_bookings
 
 def run_migration(dry_run=False):
@@ -119,7 +155,6 @@ def run_migration(dry_run=False):
     bookings_to_migrate = extract_bookings_from_shifter(shifter_path)
     print(f"Berhasil memparsing {len(bookings_to_migrate)} sesi reservasi dari Unnamed.Shifter.")
 
-    # Deduplicate within memory first
     unique_bookings = []
     seen = set()
     for b in bookings_to_migrate:
@@ -131,54 +166,41 @@ def run_migration(dry_run=False):
     print(f"Setelah menghapus duplikasi internal: {len(unique_bookings)} sesi unik siap diimpor.")
 
     if dry_run:
-        print("\n[DRY-RUN MODE] Contoh 10 data yang siap dimigrasi:")
-        for b in unique_bookings[:10]:
-            court_name = "Court 1 (A)" if b['court_id'] == 1 else "Court 2 (B)"
-            print(f"  [{b['booking_date']}] {court_name} | {b['start_time']}-{b['end_time']} | {b['customer_name']}")
-        print(f"\n[DRY-RUN MODE] Total {len(unique_bookings)} sesi siap diimpor. Tidak ada perubahan pada database Supabase.")
         return True
 
     db = SessionLocal()
-    success_count = 0
-    skip_count = 0
+    try:
+        # Fetch existing keys in ONE query
+        existing_rows = db.query(Booking.court_id, Booking.booking_date, Booking.start_time).all()
+        existing_keys = set(existing_rows)
 
-    for item in unique_bookings:
-        try:
-            # Check if booking already exists
-            existing = db.query(Booking).filter_by(
-                court_id=item["court_id"],
-                booking_date=item["booking_date"],
-                start_time=item["start_time"]
-            ).first()
+        to_insert = []
+        for item in unique_bookings:
+            k = (item["court_id"], item["booking_date"], item["start_time"])
+            if k not in existing_keys:
+                to_insert.append(Booking(
+                    court_id=item["court_id"],
+                    customer_phone=item["customer_phone"],
+                    customer_name=item["customer_name"],
+                    booking_date=item["booking_date"],
+                    start_time=item["start_time"],
+                    end_time=item["end_time"],
+                    status=item["status"],
+                    payment_status=item["payment_status"],
+                    google_event_id=item["google_event_id"]
+                ))
 
-            if existing:
-                skip_count += 1
-                continue
-
-            new_booking = Booking(
-                court_id=item["court_id"],
-                customer_phone=item["customer_phone"],
-                customer_name=item["customer_name"],
-                booking_date=item["booking_date"],
-                start_time=item["start_time"],
-                end_time=item["end_time"],
-                status=item["status"],
-                payment_status=item["payment_status"],
-                google_event_id=item["google_event_id"]
-            )
-            db.add(new_booking)
+        if to_insert:
+            db.bulk_save_objects(to_insert)
             db.commit()
-            success_count += 1
-        except IntegrityError:
-            db.rollback()
-            skip_count += 1
-        except Exception as e:
-            db.rollback()
-            print(f"Peringatan untuk {item['booking_date']} {item['start_time']}: {e}")
-
-    db.close()
-    print(f"Migrasi Selesai! Berhasil menyimpan {success_count} sesi reservasi nyata ke Supabase (Dilewati duplikat: {skip_count}).")
-    return True
+        print(f"Migrasi Selesai! Berhasil menyimpan {len(to_insert)} sesi baru ke Supabase.")
+        return True
+    except Exception as e:
+        db.rollback()
+        print(f"Terjadi kesalahan saat migrasi: {e}")
+        return False
+    finally:
+        db.close()
 
 if __name__ == "__main__":
     parser = argparse.ArgumentParser(description="Migrate Shifter data to Supabase PostgreSQL")
