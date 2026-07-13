@@ -13,6 +13,7 @@ dashboard = "streamlit run owner_dashboard.py --server.port 8501"
 
 [dependencies]
 python = "3.10.*"
+ipykernel = ">=7.3.0,<8"
 
 [pypi-dependencies]
 fastapi = ">=0.110.0"
