@@ -1,9 +1,84 @@
 import streamlit as st
 import datetime
 import pandas as pd
-from app.models.db_models import SessionLocal
-from app.services.calendar_service import get_daily_schedule
+from app.models.db_models import SessionLocal, Booking
+from app.services.calendar_service import get_daily_schedule, reschedule_booking
 from app.config import settings
+
+
+@st.dialog("⚠️ Konfirmasi Hapus Reservasi")
+def confirm_delete_modal(booking_id: int, name: str, court_id: int, time_str: str, date_str: str):
+    st.markdown(f"""
+    #### Apakah Anda yakin ingin menghapus reservasi ini?
+    - **ID Booking**: `#{booking_id}`
+    - **Nama Pemesan**: **{name}**
+    - **Lapangan**: Tennis Court {court_id} (Lap. {'A' if court_id==1 else 'B'})
+    - **Tanggal / Jam**: {date_str} Pukul **{time_str}**
+    """)
+    st.error("Perhatian: Tindakan ini akan menghapus pesanan secara permanen dari database dan mengosongkan slot lapangan.")
+    
+    col_y, col_n = st.columns(2)
+    with col_y:
+        if st.button("🗑️ Ya, Hapus Sekarang", type="primary", use_container_width=True):
+            db = SessionLocal()
+            try:
+                b = db.query(Booking).filter(Booking.id == booking_id).first()
+                if b:
+                    db.delete(b)
+                    db.commit()
+                st.success("Reservasi berhasil dihapus!")
+                st.rerun()
+            finally:
+                db.close()
+    with col_n:
+        if st.button("Batal", use_container_width=True):
+            st.rerun()
+
+
+@st.dialog("↔️ Pindah / Geser Jadwal (Drag & Drop)")
+def confirm_move_modal(booking_id: int, name: str, court_id: int, time_str: str, date_str: str):
+    st.markdown(f"""
+    #### Pindah / Geser Jadwal Reservasi `#{booking_id}` ({name})
+    - **Jadwal Asal**: Lapangan {'A (Court 1)' if court_id==1 else 'B (Court 2)'} | {date_str} Pukul **{time_str}**
+    """)
+    
+    st.markdown("---")
+    new_court = st.selectbox(
+        "🎾 Pilih Lapangan Tujuan:",
+        options=[1, 2],
+        format_func=lambda x: "Tennis Court 1 (Lapangan A)" if x == 1 else "Tennis Court 2 (Lapangan B)",
+        index=0 if court_id == 1 else 1
+    )
+    
+    time_options = [f"{h:02d}:00" for h in range(5, 23)]
+    curr_idx = time_options.index(time_str) if time_str in time_options else 0
+    new_time = st.selectbox("⏰ Pilih Waktu Baru:", options=time_options, index=curr_idx)
+    
+    st.warning(f"💡 Konfirmasi Geser: Dari **Lap. {'A' if court_id==1 else 'B'} ({time_str})** ➡️ **Lap. {'A' if new_court==1 else 'B'} ({new_time})**")
+    
+    col_y, col_n = st.columns(2)
+    with col_y:
+        if st.button("↔️ Konfirmasi Pindahkan", type="primary", use_container_width=True):
+            db = SessionLocal()
+            try:
+                success, msg = reschedule_booking(
+                    db=db,
+                    booking_id=booking_id,
+                    new_court_id=new_court,
+                    new_date=date_str,
+                    new_time_slot=new_time
+                )
+                if success:
+                    st.success("Jadwal berhasil dipindahkan!")
+                    st.rerun()
+                else:
+                    st.error(f"Gagal memindahkan jadwal: {msg}")
+            finally:
+                db.close()
+    with col_n:
+        if st.button("Batal", use_container_width=True):
+            st.rerun()
+
 
 # Page config with modern title and icon
 st.set_page_config(
@@ -204,6 +279,13 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
+# Owner Mode Toggle
+edit_mode = st.toggle(
+    "🛠️ Aktifkan Mode Edit Pengurus (Hapus & Geser/Pindah Jadwal)",
+    value=False,
+    help="Aktifkan mode ini untuk mengedit pesanan, menghapus reservasi, atau memindahkan jadwal ke lapangan/jam lain dengan konfirmasi."
+)
+
 # Control Panel directly on main dashboard
 ctrl_col1, ctrl_col2 = st.columns([1, 1])
 
@@ -270,78 +352,6 @@ with col3:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Owner Editing Mode Section
-edit_mode = st.toggle("🛠️ Masuk Mode Edit Jadwal Owner (Hapus / Pindah Reservasi)", value=False, help="Aktifkan untuk memodifikasi, memindahkan (reschedule), atau menghapus reservasi.")
-
-if edit_mode:
-    st.markdown("""
-    <div style="background: rgba(16, 185, 129, 0.12); border: 1px solid #10b981; border-radius: 12px; padding: 1.2rem; margin-bottom: 1.5rem;">
-        <h4 style="color: #10b981; margin:0;">🛠️ Mode Edit Owner Aktif</h4>
-        <p style="color: #e2e8f0; font-size: 0.9rem; margin: 4px 0 0 0;">Pilih pesanan di bawah untuk memindahkan jadwal (reschedule) atau menghapus dari sistem secara langsung.</p>
-    </div>
-    """, unsafe_allow_html=True)
-    
-    db_edit = SessionLocal()
-    try:
-        from app.models.db_models import Booking
-        active_bookings = db_edit.query(Booking).filter(
-            Booking.booking_date == date_str,
-            Booking.status != "cancelled"
-        ).order_by(Booking.start_time, Booking.court_id).all()
-        
-        if not active_bookings:
-            st.info("ℹ️ Tidak ada reservasi aktif pada tanggal ini untuk diedit.")
-        else:
-            tab_move, tab_delete = st.tabs(["↔️ Pindahkan Jadwal (Move / Reschedule)", "🗑️ Hapus Reservasi (Delete)"])
-            
-            booking_options = {
-                f"ID #{b.id} | Lapangan {b.court_id} | {b.start_time}-{b.end_time} | {b.customer_name}": b.id
-                for b in active_bookings
-            }
-            
-            with tab_move:
-                st.markdown("##### Pindahkan Reservasi ke Jam atau Lapangan Lain")
-                selected_move_label = st.selectbox("Pilih Reservasi yang Akan Dipindahkan:", list(booking_options.keys()), key="select_move")
-                selected_move_id = booking_options[selected_move_label]
-                
-                mcol1, mcol2 = st.columns(2)
-                with mcol1:
-                    new_court = st.selectbox("Pilih Lapangan Tujuan:", [1, 2], format_func=lambda x: f"Lapangan {'A' if x==1 else 'B'} (Tennis Court {x})", key="move_court")
-                with mcol2:
-                    time_options = [f"{h:02d}:00" for h in range(settings.CLUB_OPENING_HOUR, settings.CLUB_CLOSING_HOUR)]
-                    new_start_time = st.selectbox("Pilih Jam Mulai Baru:", time_options, key="move_time")
-                
-                if st.button("↔️ Eksekusi Pindah Jadwal", type="primary", key="btn_move"):
-                    target_b = db_edit.query(Booking).filter(Booking.id == selected_move_id).first()
-                    if target_b:
-                        sh = int(target_b.start_time.split(":")[0])
-                        eh = int(target_b.end_time.split(":")[0])
-                        dur = max(1, eh - sh)
-                        new_sh = int(new_start_time.split(":")[0])
-                        new_eh = min(settings.CLUB_CLOSING_HOUR, new_sh + dur)
-                        target_b.court_id = new_court
-                        target_b.start_time = f"{new_sh:02d}:00"
-                        target_b.end_time = f"{new_eh:02d}:00"
-                        db_edit.commit()
-                        st.success(f"✅ Reservasi #{target_b.id} ({target_b.customer_name}) berhasil dipindahkan ke Lapangan {new_court} pukul {target_b.start_time}-{target_b.end_time}!")
-                        st.rerun()
-            
-            with tab_delete:
-                st.markdown("##### Hapus Reservasi dari Jadwal")
-                selected_del_label = st.selectbox("Pilih Reservasi yang Akan Dihapus:", list(booking_options.keys()), key="select_del")
-                selected_del_id = booking_options[selected_del_label]
-                
-                st.warning("⚠️ Perhatian: Menghapus reservasi akan langsung mengosongkan slot lapangan pada tanggal ini.")
-                if st.button("🗑️ Hapus Reservasi Sekarang", type="primary", key="btn_delete"):
-                    del_b = db_edit.query(Booking).filter(Booking.id == selected_del_id).first()
-                    if del_b:
-                        db_edit.delete(del_b)
-                        db_edit.commit()
-                        st.success(f"🗑️ Reservasi #{selected_del_id} berhasil dihapus dari sistem!")
-                        st.rerun()
-    finally:
-        db_edit.close()
-
 # Schedule Table Section
 st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
 
@@ -373,6 +383,9 @@ for s in slots:
         c1_badge = '<span class="status-badge status-booked">Terpesan</span>'
         c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
 
+    if edit_mode and s.court_1_status != "Available":
+        c1_name += ' <span style="font-size:0.72rem; background:#fef3c7; color:#d97706; padding:2px 6px; border-radius:6px; font-weight:600;">🛠️ Edit</span>'
+
     # Court 2 Status Badge
     if s.court_2_status == "Available":
         c2_badge = '<span class="status-badge status-available">Tersedia</span>'
@@ -383,6 +396,9 @@ for s in slots:
     else:
         c2_badge = '<span class="status-badge status-booked">Terpesan</span>'
         c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
+
+    if edit_mode and s.court_2_status != "Available":
+        c2_name += ' <span style="font-size:0.72rem; background:#fef3c7; color:#d97706; padding:2px 6px; border-radius:6px; font-weight:600;">🛠️ Edit</span>'
 
     html_table += f"""
             <tr>
@@ -403,4 +419,40 @@ html_table += """
 # Render premium custom HTML table
 # We strip newlines and carriage returns to prevent Markdown from interpreting indented HTML as preformatted code blocks.
 st.markdown(html_table.replace("\n", "").replace("\r", "").strip(), unsafe_allow_html=True)
+
+# Editing Mode Interactive Management Panel
+if edit_mode:
+    st.markdown("---")
+    st.markdown(f"### 🛠️ Mode Pengaturan Pesanan — {selected_date.strftime('%d %B %Y')}")
+    st.info("Pilih pesanan di bawah ini untuk memindahkan jadwal (geser ke lapangan atau jam lain) atau menghapusnya dengan konfirmasi.")
+    
+    db_edit = SessionLocal()
+    try:
+        daily_bookings = db_edit.query(Booking).filter(
+            Booking.booking_date == date_str,
+            Booking.status.in_(["confirmed", "pending_payment"])
+        ).order_by(Booking.start_time, Booking.court_id).all()
+        
+        if not daily_bookings:
+            st.success("Tidak ada pesanan aktif pada tanggal ini.")
+        else:
+            for b in daily_bookings:
+                court_label = f"Lap. {'A (Court 1)' if b.court_id == 1 else 'B (Court 2)'}"
+                with st.container():
+                    rcol1, rcol2, rcol3, rcol4 = st.columns([2, 3, 2, 2])
+                    with rcol1:
+                        st.markdown(f"**⏰ {b.start_time} - {b.end_time}**")
+                        st.caption(f"🎾 {court_label}")
+                    with rcol2:
+                        st.markdown(f"**👤 {b.customer_name}**")
+                        st.caption(f"ID: #{b.id} | Status: {b.status}")
+                    with rcol3:
+                        if st.button("↔️ Pindah / Geser Slot", key=f"move_{b.id}", use_container_width=True):
+                            confirm_move_modal(b.id, b.customer_name, b.court_id, b.start_time, date_str)
+                    with rcol4:
+                        if st.button("🗑️ Hapus Pesanan", key=f"del_{b.id}", type="primary", use_container_width=True):
+                            confirm_delete_modal(b.id, b.customer_name, b.court_id, b.start_time, date_str)
+                    st.markdown("<hr style='margin: 8px 0; opacity: 0.1;'>", unsafe_allow_html=True)
+    finally:
+        db_edit.close()
 
