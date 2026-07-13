@@ -386,34 +386,38 @@ st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B
 
 st.markdown("""
 <style>
-/* Ultra-Massive Full-Width Toggle Banner Box */
+/* Gigantic Full-Width Toggle Banner Box */
 div[data-testid="stToggle"] {
-    background: linear-gradient(135deg, rgba(37, 99, 235, 0.4), rgba(30, 58, 138, 0.75)) !important;
-    border: 4px solid #60a5fa !important;
-    border-radius: 24px !important;
-    padding: 40px 50px !important;
-    margin: 25px 0 35px 0 !important;
-    box-shadow: 0 16px 45px rgba(59, 130, 246, 0.6) !important;
+    background: linear-gradient(135deg, rgba(37, 99, 235, 0.45), rgba(30, 58, 138, 0.85)) !important;
+    border: 5px solid #60a5fa !important;
+    border-radius: 28px !important;
+    padding: 50px 60px !important;
+    margin: 30px 0 40px 0 !important;
+    box-shadow: 0 16px 50px rgba(59, 130, 246, 0.6) !important;
     width: 100% !important;
-    min-height: 120px !important;
+    min-height: 160px !important;
+}
+div[data-testid="stToggle"] label {
     display: flex !important;
     align-items: center !important;
+    gap: 40px !important;
+    width: 100% !important;
 }
-/* Ultra-Massive 48px Label Text */
-div[data-testid="stToggle"] label,
+/* 64px Gigantic Label Text */
 div[data-testid="stToggle"] label p,
-div[data-testid="stToggle"] label span {
-    font-size: 48px !important;
+div[data-testid="stToggle"] label span,
+div[data-testid="stToggle"] label div {
+    font-size: 64px !important;
     font-weight: 900 !important;
     color: #ffffff !important;
-    letter-spacing: 1px !important;
     line-height: 1.25 !important;
 }
-/* Ultra-Massive Scaled Toggle Switch */
+/* 4.0x Scaled Gigantic Toggle Switch */
 div[data-testid="stToggle"] input + div {
-    transform: scale(3.5) !important;
+    transform: scale(4.0) !important;
     transform-origin: left center !important;
-    margin-right: 55px !important;
+    margin-right: 60px !important;
+    flex-shrink: 0 !important;
 }
 </style>
 """, unsafe_allow_html=True)
