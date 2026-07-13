@@ -1,84 +1,9 @@
 import streamlit as st
 import datetime
 import pandas as pd
-from app.models.db_models import SessionLocal, Booking
-from app.services.calendar_service import get_daily_schedule, reschedule_booking
+from app.models.db_models import SessionLocal
+from app.services.calendar_service import get_daily_schedule
 from app.config import settings
-
-
-@st.dialog("⚠️ Konfirmasi Hapus Reservasi")
-def confirm_delete_modal(booking_id: int, name: str, court_id: int, time_str: str, date_str: str):
-    st.markdown(f"""
-    #### Apakah Anda yakin ingin menghapus reservasi ini?
-    - **ID Booking**: `#{booking_id}`
-    - **Nama Pemesan**: **{name}**
-    - **Lapangan**: Tennis Court {court_id} (Lap. {'A' if court_id==1 else 'B'})
-    - **Tanggal / Jam**: {date_str} Pukul **{time_str}**
-    """)
-    st.error("Perhatian: Tindakan ini akan menghapus pesanan secara permanen dari database dan mengosongkan slot lapangan.")
-    
-    col_y, col_n = st.columns(2)
-    with col_y:
-        if st.button("🗑️ Ya, Hapus Sekarang", type="primary", use_container_width=True):
-            db = SessionLocal()
-            try:
-                b = db.query(Booking).filter(Booking.id == booking_id).first()
-                if b:
-                    db.delete(b)
-                    db.commit()
-                st.success("Reservasi berhasil dihapus!")
-                st.rerun()
-            finally:
-                db.close()
-    with col_n:
-        if st.button("Batal", use_container_width=True):
-            st.rerun()
-
-
-@st.dialog("↔️ Pindah / Geser Jadwal (Drag & Drop)")
-def confirm_move_modal(booking_id: int, name: str, court_id: int, time_str: str, date_str: str):
-    st.markdown(f"""
-    #### Pindah / Geser Jadwal Reservasi `#{booking_id}` ({name})
-    - **Jadwal Asal**: Lapangan {'A (Court 1)' if court_id==1 else 'B (Court 2)'} | {date_str} Pukul **{time_str}**
-    """)
-    
-    st.markdown("---")
-    new_court = st.selectbox(
-        "🎾 Pilih Lapangan Tujuan:",
-        options=[1, 2],
-        format_func=lambda x: "Tennis Court 1 (Lapangan A)" if x == 1 else "Tennis Court 2 (Lapangan B)",
-        index=0 if court_id == 1 else 1
-    )
-    
-    time_options = [f"{h:02d}:00" for h in range(5, 23)]
-    curr_idx = time_options.index(time_str) if time_str in time_options else 0
-    new_time = st.selectbox("⏰ Pilih Waktu Baru:", options=time_options, index=curr_idx)
-    
-    st.warning(f"💡 Konfirmasi Geser: Dari **Lap. {'A' if court_id==1 else 'B'} ({time_str})** ➡️ **Lap. {'A' if new_court==1 else 'B'} ({new_time})**")
-    
-    col_y, col_n = st.columns(2)
-    with col_y:
-        if st.button("↔️ Konfirmasi Pindahkan", type="primary", use_container_width=True):
-            db = SessionLocal()
-            try:
-                success, msg = reschedule_booking(
-                    db=db,
-                    booking_id=booking_id,
-                    new_court_id=new_court,
-                    new_date=date_str,
-                    new_time_slot=new_time
-                )
-                if success:
-                    st.success("Jadwal berhasil dipindahkan!")
-                    st.rerun()
-                else:
-                    st.error(f"Gagal memindahkan jadwal: {msg}")
-            finally:
-                db.close()
-    with col_n:
-        if st.button("Batal", use_container_width=True):
-            st.rerun()
-
 
 # Page config with modern title and icon
 st.set_page_config(
@@ -279,13 +204,6 @@ st.markdown("""
 </div>
 """, unsafe_allow_html=True)
 
-# Owner Mode Toggle
-edit_mode = st.toggle(
-    "🛠️ Aktifkan Mode Edit Pengurus (Hapus & Geser/Pindah Jadwal)",
-    value=False,
-    help="Aktifkan mode ini untuk mengedit pesanan, menghapus reservasi, atau memindahkan jadwal ke lapangan/jam lain dengan konfirmasi."
-)
-
 # Control Panel directly on main dashboard
 ctrl_col1, ctrl_col2 = st.columns([1, 1])
 
@@ -352,107 +270,194 @@ with col3:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
-# Schedule Table Section
-st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
+# Dialog Konfirmasi Hapus
+@st.dialog("⚠️ Konfirmasi Hapus Reservasi")
+def show_delete_dialog(booking_id: int, customer: str, court_name: str, time_slot: str):
+    st.write("Apakah Anda yakin ingin menghapus / membatalkan reservasi berikut?")
+    st.markdown(f"""
+    - **ID Booking**: `#{booking_id}`
+    - **Pemesan**: **{customer}**
+    - **Lapangan**: **{court_name}**
+    - **Jam**: **{time_slot}**
+    """)
+    st.warning("Tindakan ini akan membatalkan reservasi secara permanen.")
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Batal", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("🗑️ Ya, Hapus Reservasi", type="primary", use_container_width=True):
+            db_del = SessionLocal()
+            try:
+                from app.models.db_models import Booking
+                b = db_del.query(Booking).filter(Booking.id == booking_id).first()
+                if b:
+                    db_del.delete(b)
+                    db_del.commit()
+            finally:
+                db_del.close()
+            st.success("Reservasi berhasil dihapus!")
+            st.rerun()
 
-# Construct Custom HTML Table
-html_table = f"""
-<div class="custom-table-container">
-    <table class="custom-table">
-        <thead>
-            <tr>
-                <th style="width: 15%">⏰ Slot Waktu</th>
-                <th style="width: 20%">🎾 {settings.COURT_1_NAME}</th>
-                <th style="width: 25%">👤 Pemesan Lap. A</th>
-                <th style="width: 20%">🎾 {settings.COURT_2_NAME}</th>
-                <th style="width: 25%">👤 Pemesan Lap. B</th>
-            </tr>
-        </thead>
-        <tbody>
-"""
+# Dialog Konfirmasi Pindah Jadwal
+@st.dialog("↔️ Pindahkan Jadwal Reservasi")
+def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time: str, date_str: str):
+    st.write("Pilih jadwal & lapangan baru untuk memindahkan reservasi ini:")
+    st.markdown(f"**Pemesan**: **{customer}** | **Jadwal Lama**: Lapangan {'A' if old_court_id == 1 else 'B'} ({old_time})")
 
-for s in slots:
-    # Court 1 Status Badge
-    if s.court_1_status == "Available":
-        c1_badge = '<span class="status-badge status-available">Tersedia</span>'
-        c1_name = '<span class="customer-empty-text">-</span>'
-    elif s.court_1_status == "Pending Payment":
-        c1_badge = '<span class="status-badge status-pending">Pending</span>'
-        c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
-    else:
-        c1_badge = '<span class="status-badge status-booked">Terpesan</span>'
-        c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
+    new_court = st.selectbox(
+        "🎾 Pilih Lapangan Tujuan:",
+        options=[1, 2],
+        format_func=lambda x: settings.COURT_1_NAME if x == 1 else settings.COURT_2_NAME
+    )
+    all_hours = [f"{h:02d}:00" for h in range(5, 23)]
+    new_time = st.selectbox("⏰ Pilih Jam Mulai Baru:", options=all_hours, index=all_hours.index(old_time) if old_time in all_hours else 0)
 
-    if edit_mode and s.court_1_status != "Available":
-        c1_name += ' <span style="font-size:0.72rem; background:#fef3c7; color:#d97706; padding:2px 6px; border-radius:6px; font-weight:600;">🛠️ Edit</span>'
+    st.warning(f"Konfirmasi Pindah: Dari Lapangan {'A' if old_court_id==1 else 'B'} ({old_time}) ➔ Lapangan {'A' if new_court==1 else 'B'} ({new_time})")
 
-    # Court 2 Status Badge
-    if s.court_2_status == "Available":
-        c2_badge = '<span class="status-badge status-available">Tersedia</span>'
-        c2_name = '<span class="customer-empty-text">-</span>'
-    elif s.court_2_status == "Pending Payment":
-        c2_badge = '<span class="status-badge status-pending">Pending</span>'
-        c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
-    else:
-        c2_badge = '<span class="status-badge status-booked">Terpesan</span>'
-        c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Batal", key="cancel_move", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("✅ Ya, Pindahkan Sekarang", type="primary", key="confirm_move", use_container_width=True):
+            db_mov = SessionLocal()
+            try:
+                from app.models.db_models import Booking
+                end_h = int(new_time.split(":")[0]) + 1
+                new_end = f"{end_h:02d}:00"
 
-    if edit_mode and s.court_2_status != "Available":
-        c2_name += ' <span style="font-size:0.72rem; background:#fef3c7; color:#d97706; padding:2px 6px; border-radius:6px; font-weight:600;">🛠️ Edit</span>'
+                existing = db_mov.query(Booking).filter(
+                    Booking.booking_date == date_str,
+                    Booking.court_id == new_court,
+                    Booking.start_time == new_time,
+                    Booking.id != booking_id
+                ).first()
 
-    html_table += f"""
-            <tr>
-                <td><span class="time-slot-badge">{s.time}</span></td>
-                <td>{c1_badge}</td>
-                <td>{c1_name}</td>
-                <td>{c2_badge}</td>
-                <td>{c2_name}</td>
-            </tr>
+                if existing:
+                    st.error(f"Gagal memindahkan: Lapangan dan jam tersebut sudah terisi oleh {existing.customer_name}!")
+                else:
+                    b = db_mov.query(Booking).filter(Booking.id == booking_id).first()
+                    if b:
+                        b.court_id = new_court
+                        b.start_time = new_time
+                        b.end_time = new_end
+                        db_mov.commit()
+                        st.success("Jadwal berhasil dipindahkan!")
+                        st.rerun()
+            finally:
+                db_mov.close()
+
+# Schedule Table Header & Control
+head_col1, head_col2 = st.columns([3, 1])
+with head_col1:
+    st.subheader(f"📋 Jadwal Rinci & Nama Pemesan - {selected_date.strftime('%d %B %Y')}")
+with head_col2:
+    edit_mode = st.toggle("🛠️ Mode Edit Owner", value=False, help="Aktifkan untuk menampilkan tombol Hapus & Pindah Jadwal di dalam kolom Pemesan.")
+
+if not edit_mode:
+    # Construct Custom HTML Table (Read-Only Mode)
+    html_table = f"""
+    <div class="custom-table-container">
+        <table class="custom-table">
+            <thead>
+                <tr>
+                    <th style="width: 15%">⏰ Slot Waktu</th>
+                    <th style="width: 20%">🎾 {settings.COURT_1_NAME}</th>
+                    <th style="width: 25%">👤 Pemesan Lap. A</th>
+                    <th style="width: 20%">🎾 {settings.COURT_2_NAME}</th>
+                    <th style="width: 25%">👤 Pemesan Lap. B</th>
+                </tr>
+            </thead>
+            <tbody>
     """
 
-html_table += """
-        </tbody>
-    </table>
-</div>
-"""
-
-# Render premium custom HTML table
-# We strip newlines and carriage returns to prevent Markdown from interpreting indented HTML as preformatted code blocks.
-st.markdown(html_table.replace("\n", "").replace("\r", "").strip(), unsafe_allow_html=True)
-
-# Editing Mode Interactive Management Panel
-if edit_mode:
-    st.markdown("---")
-    st.markdown(f"### 🛠️ Mode Pengaturan Pesanan — {selected_date.strftime('%d %B %Y')}")
-    st.info("Pilih pesanan di bawah ini untuk memindahkan jadwal (geser ke lapangan atau jam lain) atau menghapusnya dengan konfirmasi.")
-    
-    db_edit = SessionLocal()
-    try:
-        daily_bookings = db_edit.query(Booking).filter(
-            Booking.booking_date == date_str,
-            Booking.status.in_(["confirmed", "pending_payment"])
-        ).order_by(Booking.start_time, Booking.court_id).all()
-        
-        if not daily_bookings:
-            st.success("Tidak ada pesanan aktif pada tanggal ini.")
+    for s in slots:
+        if s.court_1_status == "Available":
+            c1_badge = '<span class="status-badge status-available">Tersedia</span>'
+            c1_name = '<span class="customer-empty-text">-</span>'
+        elif s.court_1_status == "Pending Payment":
+            c1_badge = '<span class="status-badge status-pending">Pending</span>'
+            c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
         else:
-            for b in daily_bookings:
-                court_label = f"Lap. {'A (Court 1)' if b.court_id == 1 else 'B (Court 2)'}"
-                with st.container():
-                    rcol1, rcol2, rcol3, rcol4 = st.columns([2, 3, 2, 2])
-                    with rcol1:
-                        st.markdown(f"**⏰ {b.start_time} - {b.end_time}**")
-                        st.caption(f"🎾 {court_label}")
-                    with rcol2:
-                        st.markdown(f"**👤 {b.customer_name}**")
-                        st.caption(f"ID: #{b.id} | Status: {b.status}")
-                    with rcol3:
-                        if st.button("↔️ Pindah / Geser Slot", key=f"move_{b.id}", use_container_width=True):
-                            confirm_move_modal(b.id, b.customer_name, b.court_id, b.start_time, date_str)
-                    with rcol4:
-                        if st.button("🗑️ Hapus Pesanan", key=f"del_{b.id}", type="primary", use_container_width=True):
-                            confirm_delete_modal(b.id, b.customer_name, b.court_id, b.start_time, date_str)
-                    st.markdown("<hr style='margin: 8px 0; opacity: 0.1;'>", unsafe_allow_html=True)
-    finally:
-        db_edit.close()
+            c1_badge = '<span class="status-badge status-booked">Terpesan</span>'
+            c1_name = f'<span class="customer-name-text">{s.court_1_customer}</span>'
+
+        if s.court_2_status == "Available":
+            c2_badge = '<span class="status-badge status-available">Tersedia</span>'
+            c2_name = '<span class="customer-empty-text">-</span>'
+        elif s.court_2_status == "Pending Payment":
+            c2_badge = '<span class="status-badge status-pending">Pending</span>'
+            c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
+        else:
+            c2_badge = '<span class="status-badge status-booked">Terpesan</span>'
+            c2_name = f'<span class="customer-name-text">{s.court_2_customer}</span>'
+
+        html_table += f"""
+                <tr>
+                    <td><span class="time-slot-badge">{s.time}</span></td>
+                    <td>{c1_badge}</td>
+                    <td>{c1_name}</td>
+                    <td>{c2_badge}</td>
+                    <td>{c2_name}</td>
+                </tr>
+        """
+
+    html_table += """
+            </tbody>
+        </table>
+    </div>
+    """
+    st.markdown(html_table.replace("\n", "").replace("\r", "").strip(), unsafe_allow_html=True)
+
+else:
+    # Interactive Owner Editing Grid Table
+    st.info("🛠️ **Mode Edit Owner Aktif**: Klik tombol **🗑️ Hapus** atau **↔️ Pindah (Drag/Reschedule)** langsung di dalam kolom pemesan untuk mengelola jadwal.")
+    
+    col_h1, col_h2, col_h3, col_h4, col_h5 = st.columns([1.1, 1.2, 2.7, 1.2, 2.7])
+    col_h1.markdown("**⏰ Slot Waktu**")
+    col_h2.markdown(f"**🎾 {settings.COURT_1_NAME}**")
+    col_h3.markdown("**👤 Pemesan & Aksi Lap. A**")
+    col_h4.markdown(f"**🎾 {settings.COURT_2_NAME}**")
+    col_h5.markdown("**👤 Pemesan & Aksi Lap. B**")
+    st.markdown("---")
+
+    for s in slots:
+        c1, c2, c3, c4, c5 = st.columns([1.1, 1.2, 2.7, 1.2, 2.7])
+        c1.markdown(f"`{s.time}`")
+        
+        # Court 1 Status
+        status_c1_label = "🟢 Tersedia" if s.court_1_status == "Available" else ("🟡 Pending" if s.court_1_status == "Pending Payment" else "🔴 Terpesan")
+        c2.markdown(status_c1_label)
+
+        # Court 1 Pemesan & Action Buttons inside cell
+        with c3:
+            if s.court_1_status != "Available" and s.court_1_booking_id:
+                st.markdown(f"**👤 {s.court_1_customer}**")
+                b1, b2 = st.columns(2)
+                if b1.button("🗑️ Hapus", key=f"del_c1_{s.time}_{s.court_1_booking_id}", use_container_width=True):
+                    show_delete_dialog(s.court_1_booking_id, s.court_1_customer or "Customer", settings.COURT_1_NAME, s.time)
+                if b2.button("↔️ Pindah", key=f"mov_c1_{s.time}_{s.court_1_booking_id}", use_container_width=True):
+                    show_move_dialog(s.court_1_booking_id, s.court_1_customer or "Customer", 1, s.time, date_str)
+            else:
+                st.markdown("*-*")
+
+        # Court 2 Status
+        status_c2_label = "🟢 Tersedia" if s.court_2_status == "Available" else ("🟡 Pending" if s.court_2_status == "Pending Payment" else "🔴 Terpesan")
+        c4.markdown(status_c2_label)
+
+        # Court 2 Pemesan & Action Buttons inside cell
+        with c5:
+            if s.court_2_status != "Available" and s.court_2_booking_id:
+                st.markdown(f"**👤 {s.court_2_customer}**")
+                b3, b4 = st.columns(2)
+                if b3.button("🗑️ Hapus", key=f"del_c2_{s.time}_{s.court_2_booking_id}", use_container_width=True):
+                    show_delete_dialog(s.court_2_booking_id, s.court_2_customer or "Customer", settings.COURT_2_NAME, s.time)
+                if b4.button("↔️ Pindah", key=f"mov_c2_{s.time}_{s.court_2_booking_id}", use_container_width=True):
+                    show_move_dialog(s.court_2_booking_id, s.court_2_customer or "Customer", 2, s.time, date_str)
+            else:
+                st.markdown("*-*")
+
+        st.markdown("<hr style='margin: 4px 0; border-color: rgba(255,255,255,0.05);'>", unsafe_allow_html=True)
+
 
