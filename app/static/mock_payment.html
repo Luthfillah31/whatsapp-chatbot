@@ -132,7 +132,7 @@
         
         <div class="total-row">
             <span>Total Bayar</span>
-            <span id="total-amount-label">Rp 50.000</span>
+            <span id="total-amount-label">Rp 75.000</span>
         </div>
         
         <button class="btn-pay" id="btn-submit" onclick="processPayment()">Bayar Sekarang (Simulasi)</button>
@@ -147,7 +147,7 @@
     <script>
         const urlParams = new URLSearchParams(window.location.search);
         const orderId = urlParams.get('order_id') || 'booking-0';
-        const grossAmount = urlParams.get('gross_amount') || '50000';
+        const grossAmount = urlParams.get('gross_amount') || '75000';
         
         document.getElementById('order-id-label').innerText = orderId;
         document.getElementById('total-amount-label').innerText = 'Rp ' + parseInt(grossAmount).toLocaleString('id-ID');

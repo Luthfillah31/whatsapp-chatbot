@@ -74,7 +74,7 @@ def test_signature_verification():
     is_valid = payment_service.verify_midtrans_signature(
         order_id="booking-1",
         status_code="200",
-        gross_amount="50000.00",
+        gross_amount="75000.00",
         signature_key="mock-signature"
     )
     assert is_valid is True
@@ -139,7 +139,7 @@ def test_webhook_receipt_delivery(test_db):
         payload = {
             "order_id": f"booking-{res.booking_id}",
             "transaction_status": "settlement",
-            "gross_amount": "50000.00",
+            "gross_amount": "75000.00",
             "status_code": "200",
             "signature_key": "mock-signature"
         }
