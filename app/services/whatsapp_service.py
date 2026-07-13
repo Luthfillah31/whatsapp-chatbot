@@ -107,10 +107,60 @@ def parse_evolution_webhook(payload: Dict[str, Any]) -> List[IncomingChatMessage
     return incoming_msgs
 
 
+def _convert_markdown_tables(text: str) -> str:
+    lines = text.splitlines()
+    result = []
+    i = 0
+    while i < len(lines):
+        line = lines[i]
+        if (
+            '|' in line
+            and i + 1 < len(lines)
+            and '|' in lines[i + 1]
+            and re.match(r'^\s*\|?\s*[-:]{2,}\s*(\|\s*[-:]{2,}\s*)+\|?\s*$', lines[i + 1])
+        ):
+            headers = [h.strip() for h in line.strip().strip('|').split('|')]
+            i += 2
+            table_rows = []
+            while i < len(lines) and '|' in lines[i] and not re.match(r'^\s*$', lines[i]):
+                row_cells = [c.strip() for c in lines[i].strip().strip('|').split('|')]
+                table_rows.append(row_cells)
+                i += 1
+            for row in table_rows:
+                if not row or all(not c for c in row):
+                    continue
+                clean_first = row[0].strip('*').strip()
+                if len(row) == 1:
+                    result.append(f"• {clean_first}")
+                elif len(row) == 2:
+                    result.append(f"• *{clean_first}:* {row[1]}")
+                else:
+                    rest = []
+                    for h_idx in range(1, len(row)):
+                        val = row[h_idx]
+                        if not val:
+                            continue
+                        h_name = headers[h_idx] if h_idx < len(headers) and headers[h_idx] else ""
+                        if h_name and h_name.lower() not in ["keterangan", "status", "detail"]:
+                            rest.append(f"{h_name}: {val}")
+                        else:
+                            rest.append(val)
+                    rest_str = " | ".join(rest) if rest else ""
+                    if rest_str:
+                        result.append(f"• *{clean_first}* — {rest_str}")
+                    else:
+                        result.append(f"• *{clean_first}*")
+            continue
+        result.append(line)
+        i += 1
+    return "\n".join(result)
+
+
 def format_text_for_whatsapp(text: str) -> str:
     """Sanitizes standard Markdown syntax into valid WhatsApp text formatting."""
     if not text:
         return ""
+    text = _convert_markdown_tables(text)
     # Replace markdown headers (# Header or ## Header) with *HEADER*
     text = re.sub(r'^#{1,6}\s*(.+)$', lambda m: f"*{m.group(1).strip().upper()}*", text, flags=re.MULTILINE)
     # Replace double asterisks **bold** with *bold*

@@ -24,3 +24,21 @@ def test_format_text_for_whatsapp_already_whatsapp():
     raw_text = "*Hello*, this is _italic_ and ~strike~."
     expected = "*Hello*, this is _italic_ and ~strike~."
     assert format_text_for_whatsapp(raw_text) == expected
+
+
+def test_format_text_for_whatsapp_markdown_table():
+    raw_text = (
+        "📋 Price List Lapangan Tennis GBM:\n"
+        "\n"
+        "| Waktu | Tarif Sewa |\n"
+        "|-------|------------|\n"
+        "| Pagi - Sore (05:00 - 17:00 WIB) | Rp 75.000 / jam |\n"
+        "| Malam (17:00 - 23:00 WIB) | Rp 80.000 / jam |"
+    )
+    expected = (
+        "📋 Price List Lapangan Tennis GBM:\n"
+        "\n"
+        "• *Pagi - Sore (05:00 - 17:00 WIB):* Rp 75.000 / jam\n"
+        "• *Malam (17:00 - 23:00 WIB):* Rp 80.000 / jam"
+    )
+    assert format_text_for_whatsapp(raw_text) == expected

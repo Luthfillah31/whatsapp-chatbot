@@ -25,7 +25,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "check_court_availability",
-            "description": "Check if Lapangan A (court_id=1) and/or Lapangan B (court_id=2) are available on a specific date and time.",
+            "description": "Check if Lapangan A (court_id=1) and/or Lapangan B (court_id=2) are available on a specific date, start time slot, and duration. ALWAYS pass duration_hours when checking multi-hour availability (e.g. '16:00 to 18:00' -> duration_hours=2).",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -36,6 +36,10 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     "time_slot": {
                         "type": "string",
                         "description": "Start time slot in 24-hour HH:MM format (e.g., '16:00' for 4 PM)."
+                    },
+                    "duration_hours": {
+                        "type": "integer",
+                        "description": "Number of consecutive hours requested (1 to 18 hours). MUST pass if customer mentions playing duration or end time (e.g., 2 for 16:00-18:00). Defaults to 1."
                     },
                     "court_id": {
                         "type": "integer",
@@ -250,6 +254,17 @@ INFORMASI PENTING KOMPLEK PERUMAHAN:
 - Biaya & Tarif Sewa Lapangan:
   * Jam Pagi - Sore (05:00 - 17:00 WIB): Rp 75.000 / jam
   * Jam Malam (17:00 - 23:00 WIB): Rp 80.000 / jam
+  * PERHITUNGAN BIAYA LINTAS WAKTU (CROSS CALCULATION / LEWAT JAM 17:00):
+    - Tarif dihitung PER JAM berdasarkan posisi masing-masing jam bermain. Mulai tepat pukul 17:00 sudah masuk tarif malam (Rp 80.000/jam).
+    - CONTOH 1 (SANGAT PENTING): Booking jam 16:00 - 18:00 (durasi 2 jam):
+      • Jam 16:00 - 17:00 (1 jam Pagi-Sore) = Rp 75.000
+      • Jam 17:00 - 18:00 (1 jam Malam) = Rp 80.000
+      • TOTAL BIAYA = Rp 155.000 (DILARANG KERAS MENGHITUNG Rp 150.000!).
+    - CONTOH 2: Booking jam 15:00 - 18:00 (durasi 3 jam):
+      • Jam 15:00 - 17:00 (2 jam Pagi-Sore) = 2 x Rp 75.000 = Rp 150.000
+      • Jam 17:00 - 18:00 (1 jam Malam) = Rp 80.000
+      • TOTAL BIAYA = Rp 230.000.
+    - Anda WAJIB memeriksa apakah jam bermain melewati pukul 17:00 dan menghitung total biaya secara teliti jam per jam!
 - Fasilitas: '{settings.COURT_1_NAME}' (court_id=1) dan '{settings.COURT_2_NAME}' (court_id=2). Gunakan sebutan Lapangan A dan Lapangan B saat menjawab warga.
 
 IDENTITAS PENGGUNA AKTIF:
@@ -264,7 +279,11 @@ IDENTITAS PENGGUNA AKTIF:
    - DILARANG KERAS memberikan link pembayaran tanpa menjalankan tool 'book_court'.
 
 ===== ALUR PELAYANAN RESERVASI WARGA =====
-1. CEK JADWAL KOSONG: Jika warga bertanya jadwal kosong atau menanyakan lapangan yang kosong, PANGGIL TOOL check_court_availability, lalu beritahu hasilnya secara netral.
+1. CEK JADWAL KOSONG & KETERSEDIAAN:
+   - Jika warga menanyakan ketersediaan lapangan pada jam tertentu (terutama jika menyebut rentang jam seperti "16 sampe 18" atau durasi main), Anda WAJIB memanggil tool 'check_court_availability' dengan mengisi parameter 'time_slot' (misal '16:00') DAN 'duration_hours' (misal 2).
+   - SAAT MENJAWAB INFORMASI KETERSEDIAAN UNTUK DURASI LEBIH DARI 1 JAM (>1 jam):
+     Anda WAJIB MENCANTUMKAN TOTAL BIAYA SELURUH DURASI DAN RINCIAN TARIFNYA SESUAI HASIL TOOL (contoh: "Total Rp 155.000 untuk 2 jam (16:00-17:00 Rp 75.000 + 17:00-18:00 Rp 80.000)").
+     DILARANG KERAS hanya menuliskan tarif 1 jam pertama (seperti "Rp 75.000/jam") jika warga memesan 2 jam atau lebih karena sangat menyesatkan!
 2. BOOKING LAPANGAN:
    - Jika warga secara eksplisit meminta atau menyetujui booking/reservasi (misalnya: "saya mau booking...", "ya setuju boleh", "oke pesan"), Anda WAJIB langsung memanggil tool 'book_court'.
    - Jika nama warga sudah pernah disebutkan sebelumnya dalam riwayat percakapan, gunakan nama tersebut untuk parameter 'customer_name' dan langsung panggil tool 'book_court'.
@@ -280,9 +299,11 @@ IDENTITAS PENGGUNA AKTIF:
 5. PEMBATALAN: Jika ingin batal, minta ID Booking lalu proses pembatalan.
 6. RESET MEMORI: Jika warga ingin hapus history, arahkan untuk mengetik **/reset**, **/clear**, atau **/start**.
 
-===== FORMATTING PESAN =====
-- Gunakan tanda bintang ganda **untuk tebal** saat menyoroti Nama Lapangan, Jam, atau Tanggal.
-- Gunakan emoji secukupnya (🎾, 📅, 🏡, 😊) agar percakapan bersahabat dan natural."""
+===== FORMATTING PESAN UNTUK WHATSAPP (WAJIB DIPATUHI!) =====
+- DILARANG KERAS menggunakan tabel Markdown (seperti | Waktu | Tarif |) karena pesan dikirim via WhatsApp dan tabel Markdown tidak dapat dibaca di HP.
+- Selalu gunakan format daftar/bullet points (• atau -) yang rapi, bersih, bersahabat, dan mudah dibaca di layar HP WhatsApp.
+- Gunakan tanda bintang *untuk tebal* saat menonjolkan informasi penting seperti Nama Lapangan, Jam, Tarif, atau Tanggal.
+- Gunakan emoji secukupnya (🎾, 📅, 📋, 😊) agar percakapan bersahabat dan natural."""
 
 
 def _sanitize_bookings_for_llm(bookings: list) -> list:
@@ -352,7 +373,7 @@ def _extract_duration_hours(args: Dict[str, Any], slot: str, default: Any = 1) -
             return max(1, min(18, int(dur)))
         except (ValueError, TypeError):
             pass
-    end_time = args.get("end_time")
+    end_time = args.get("end_time") or args.get("end_slot") or args.get("end_time_slot")
     if end_time:
         try:
             sh = int(slot.split(":")[0])
@@ -361,7 +382,7 @@ def _extract_duration_hours(args: Dict[str, Any], slot: str, default: Any = 1) -
                 return max(1, min(18, eh - sh))
         except Exception:
             pass
-    raw_slot = str(args.get("new_time_slot") or args.get("time_slot") or "")
+    raw_slot = str(args.get("new_time_slot") or args.get("time_slot") or args.get("start_time") or "")
     if "-" in raw_slot:
         try:
             parts = [p.strip() for p in raw_slot.split("-")]
@@ -389,12 +410,14 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
 
     elif tool_name == "check_court_availability":
         slot = _extract_slot(arguments)
+        dur = _extract_duration_hours(arguments, slot, default=1)
         court_id = _extract_court_id(arguments.get("court_id"), default=None)
         res = calendar_service.check_court_availability(
             db=db,
             date=arguments["date"],
             time_slot=slot,
-            court_id=court_id
+            court_id=court_id,
+            duration_hours=dur
         )
         return res.model_dump()
 
@@ -584,7 +607,8 @@ def process_chat_message(
         "content": "PENGINGAT PENTING:\n"
                    "1. Untuk pertanyaan soal jadwal atau reservasi, Anda WAJIB memanggil tool untuk mengambil data terkini dari database. Hasil tool adalah SATU-SATUNYA SUMBER KEBENARAN.\n"
                    "2. GAYA BAHASA HARUS NETRAL & PROFESIONAL: DILARANG KERAS menggunakan kata-kata bernuansa agama (seperti: Alhamdulillah, Insya Allah, Masya Allah, Puji Tuhan, dll) atau opini/ekspresi berlebihan. Gunakan bahasa Indonesia yang sopan, netral, objektif, dan profesional.\n"
-                   "3. ANTI-HALUSINASI TOOL: Setelah memanggil tool (seperti cancel_booking atau book_court), periksa field 'success' pada hasil tool. Jika 'success' bernilai false, sampaikan pesan error sesuai hasil tool dan JANGAN PERNAH mengatakan reservasi berhasil dibuat atau dibatalkan!"
+                   "3. ANTI-HALUSINASI TOOL: Setelah memanggil tool (seperti cancel_booking atau book_court), periksa field 'success' pada hasil tool. Jika 'success' bernilai false, sampaikan pesan error sesuai hasil tool dan JANGAN PERNAH mengatakan reservasi berhasil dibuat atau dibatalkan!\n"
+                   "4. FORMAT WHATSAPP: DILARANG KERAS menggunakan tabel Markdown (| ... |). Gunakan format daftar/bullet point (• atau -) yang rapi dan mudah dibaca di layar HP WhatsApp."
     })
 
     # Ensure current message is in the list if not already retrieved

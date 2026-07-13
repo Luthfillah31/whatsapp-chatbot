@@ -2,7 +2,7 @@ import os
 import datetime
 import re
 import logging
-from typing import Optional, List, Dict, Any, cast
+from typing import Optional, List, Dict, Any, cast, Tuple
 from sqlalchemy.orm import Session
 from sqlalchemy.exc import IntegrityError
 from app.config import settings
@@ -48,7 +48,7 @@ def get_indonesian_day_name(dt: datetime.date) -> str:
 def get_slot_hourly_rate(time_slot: str) -> int:
     """Return hourly rate based on start time slot (05:00-17:00 = 75.000, 17:00-23:00 = 80.000)."""
     try:
-        hour = int(str(time_slot).split(":")[0])
+        hour = int(time_slot.split(":")[0])
         if hour >= 17:
             return getattr(settings, "HOURLY_RATE_EVENING_IDR", 80000)
         else:
@@ -61,7 +61,7 @@ def calculate_total_booking_price(start_time: str, duration_hours: int) -> int:
     """Calculate total price summing up hourly rate for each hour."""
     total = 0
     try:
-        start_h = int(str(start_time).split(":")[0])
+        start_h = int(start_time.split(":")[0])
         for offset in range(duration_hours):
             h = start_h + offset
             if h >= 17:
@@ -71,6 +71,37 @@ def calculate_total_booking_price(start_time: str, duration_hours: int) -> int:
         return total
     except Exception:
         return duration_hours * settings.HOURLY_RATE_IDR
+
+
+def get_booking_price_breakdown(start_time: str, duration_hours: int) -> Tuple[int, str]:
+    """Calculate total price and detailed hourly breakdown string for multi-hour bookings."""
+    total = 0
+    parts = []
+    try:
+        start_h = int(start_time.split(":")[0])
+        for offset in range(duration_hours):
+            h = start_h + offset
+            h_str = f"{h:02d}:00"
+            next_h_str = f"{h + 1:02d}:00"
+            if h >= 17:
+                rate = getattr(settings, "HOURLY_RATE_EVENING_IDR", 80000)
+            else:
+                rate = getattr(settings, "HOURLY_RATE_DAYTIME_IDR", 75000)
+            total += rate
+            rate_formatted = f"Rp {rate:,}".replace(",", ".")
+            parts.append(f"{h_str}-{next_h_str} {rate_formatted}")
+        breakdown_str = " + ".join(parts)
+        total_formatted = f"Rp {total:,}".replace(",", ".")
+        if duration_hours > 1:
+            end_h_str = f"{start_h + duration_hours:02d}:00"
+            summary_str = f"Total {total_formatted} untuk {duration_hours} jam ({start_time}-{end_h_str}: {breakdown_str})"
+        else:
+            summary_str = f"{total_formatted}/jam"
+        return total, summary_str
+    except Exception:
+        total = calculate_total_booking_price(start_time, duration_hours)
+        total_formatted = f"Rp {total:,}".replace(",", ".")
+        return total, f"Total {total_formatted}"
 
 
 # Try importing Google API client libraries
@@ -149,7 +180,8 @@ def check_court_availability(
     date: str, 
     time_slot: str, 
     court_id: Optional[int] = None,
-    exclude_booking_id: Optional[int] = None
+    exclude_booking_id: Optional[int] = None,
+    duration_hours: int = 1
 ) -> CourtAvailabilityResponse:
     """
     Checks if Court 1 and/or Court 2 are available on the specified date and time slot.
@@ -239,9 +271,15 @@ def check_court_availability(
     except Exception:
         pass
 
+    try:
+        duration_hours = max(1, int(duration_hours))
+    except (ValueError, TypeError):
+        duration_hours = 1
+    req_end_time = calculate_end_time(time_slot, duration_hours)
+
     query = db.query(Booking).filter(
         Booking.booking_date == date,
-        Booking.start_time <= time_slot,
+        Booking.start_time < req_end_time,
         Booking.end_time > time_slot,
         Booking.status.in_(["confirmed", "pending_payment"])
     )
@@ -292,18 +330,24 @@ def check_court_availability(
 
     # If specific court was requested, adjust summary text
     day_name = get_indonesian_day_name(booking_date)
-    rate = get_slot_hourly_rate(time_slot)
+    total_price, price_info = get_booking_price_breakdown(time_slot, duration_hours)
+    end_slot = calculate_end_time(time_slot, duration_hours)
+    if duration_hours > 1:
+        time_display = f"{time_slot}-{end_slot} ({duration_hours} jam)"
+    else:
+        time_display = time_slot
+
     cal_alert = f"[PENGINGAT KALENDER: Tanggal {date} adalah HARI {day_name.upper()}. Jika pengguna menyebut hari lain seperti Senin/Selasa, Anda WAJIB memberi tahu bahwa {date} adalah Hari {day_name}.]\n"
     if court_id == 1:
-        status_text = f"tersedia (Rp {rate:,}/jam)" if c1_avail else "SUDAH TERISI"
-        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_slot}: {settings.COURT_1_NAME} {status_text}."
+        status_text = f"tersedia ({price_info})" if c1_avail else "SUDAH TERISI"
+        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_display}: {settings.COURT_1_NAME} {status_text}."
     elif court_id == 2:
-        status_text = f"tersedia (Rp {rate:,}/jam)" if c2_avail else "SUDAH TERISI"
-        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_slot}: {settings.COURT_2_NAME} {status_text}."
+        status_text = f"tersedia ({price_info})" if c2_avail else "SUDAH TERISI"
+        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_display}: {settings.COURT_2_NAME} {status_text}."
     else:
-        c1_str = f"Tersedia (Rp {rate:,}/jam)" if c1_avail else "Sudah Terisi"
-        c2_str = f"Tersedia (Rp {rate:,}/jam)" if c2_avail else "Sudah Terisi"
-        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_slot}:\n- {settings.COURT_1_NAME}: {c1_str}\n- {settings.COURT_2_NAME}: {c2_str}"
+        c1_str = f"Tersedia ({price_info})" if c1_avail else "Sudah Terisi"
+        c2_str = f"Tersedia ({price_info})" if c2_avail else "Sudah Terisi"
+        summary = f"{cal_alert}Hari {day_name}, {date} jam {time_display}:\n- {settings.COURT_1_NAME}: {c1_str}\n- {settings.COURT_2_NAME}: {c2_str}"
 
     return CourtAvailabilityResponse(
         date=date,

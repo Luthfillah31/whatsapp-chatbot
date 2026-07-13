@@ -56,6 +56,23 @@ def test_double_booking_prevention(test_db):
     assert res3.booking_id == 2
 
 
+def test_cross_calculation_pricing(test_db):
+    """Test that booking from 16:00 for 2 hours (16:00-18:00) calculates cross-boundary price correctly as 155.000."""
+    total = calendar_service.calculate_total_booking_price("16:00", 2)
+    assert total == 155000
+
+    # Also verify check_court_availability includes total price for 2 hours
+    avail = calendar_service.check_court_availability(
+        db=test_db,
+        date="2026-08-16",
+        time_slot="16:00",
+        court_id=1,
+        duration_hours=2
+    )
+    assert "155.000" in avail.summary_text
+    assert "16:00-17:00 Rp 75.000 + 17:00-18:00 Rp 80.000" in avail.summary_text
+
+
 def test_cancellation_flow(test_db):
     """Test cancelling an existing reservation and freeing up the court."""
     res = calendar_service.create_booking(
