@@ -15,8 +15,12 @@ if PROJECT_ROOT not in sys.path:
 
 from app.models.db_models import SessionLocal, Booking
 
-def parse_time_slot_enhanced(digits, ampm, current_period="AM"):
-    period = (ampm or current_period).upper()
+def parse_time_slot_enhanced(digits, ampm, current_period="PM"):
+    # Aturan Pak Tumpal: Kalau tidak ada a/A berarti PM
+    if ampm and any(a in str(ampm).upper() for a in ['A', 'AM', 'PAGI']):
+        period = "AM"
+    else:
+        period = "PM"
     start_h = None
     end_h = None
 
@@ -79,7 +83,7 @@ def extract_bookings_from_shifter(db_path="Unnamed.Shifter"):
 
         text = html.unescape(re.sub(r'<[^>]+>', '\n', notas))
         current_court = 1
-        current_period = "AM"
+        current_period = "PM"
 
         for line in text.split('\n'):
             line_clean = line.strip()
