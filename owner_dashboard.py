@@ -312,6 +312,77 @@ with col3:
 
 st.markdown("<br>", unsafe_allow_html=True)
 
+# Dialog Tambah Reservasi Manual
+@st.dialog("➕ Tambah Reservasi Manual")
+def show_add_dialog(court_id: int, court_name: str, start_time: str, date_str: str):
+    st.write(f"Menambahkan reservasi manual untuk **{court_name}** pada tanggal **{date_str}**:")
+    
+    customer_name = st.text_input("👤 Nama Pemesan / Customer:", placeholder="Contoh: Bapak Budi / Komunitas ABC")
+    phone_number = st.text_input("📱 Nomor WhatsApp / HP:", value="081234567890", placeholder="08...")
+    
+    duration_hours = st.selectbox("⏳ Durasi Reservasi (Jam):", options=[1, 2, 3, 4], index=0)
+    
+    start_h = int(start_time.split(":")[0])
+    end_h = min(23, start_h + duration_hours)
+    end_time = f"{end_h:02d}:00"
+    
+    status_choice = st.selectbox(
+        "📌 Status Pembayaran:",
+        options=["confirmed", "pending_payment"],
+        format_func=lambda x: "🟢 Confirmed (Sudah Bayar / Terkonfirmasi)" if x == "confirmed" else "🟡 Pending Payment (Belum Bayar)"
+    )
+    
+    st.info(f"📋 **Ringkasan Jadwal Baru**:\n- **Tanggal**: `{date_str}`\n- **Lapangan**: `{court_name}`\n- **Waktu**: `{start_time} - {end_time}` ({duration_hours} Jam)\n- **Status**: `{status_choice.upper()}`")
+    
+    col1, col2 = st.columns(2)
+    with col1:
+        if st.button("❌ Batal", key=f"cancel_add_{court_id}_{start_time}", use_container_width=True):
+            st.rerun()
+    with col2:
+        if st.button("✅ Simpan Reservasi", type="primary", key=f"confirm_add_{court_id}_{start_time}", use_container_width=True):
+            if not customer_name or not customer_name.strip():
+                st.error("❌ Nama pemesan wajib diisi!")
+                return
+            
+            db_add = SessionLocal()
+            try:
+                from app.models.db_models import Booking
+                from sqlalchemy import func
+                
+                existing = db_add.query(Booking).filter(
+                    Booking.booking_date == date_str,
+                    Booking.court_id == court_id,
+                    Booking.start_time < end_time,
+                    Booking.end_time > start_time
+                ).first()
+                
+                if existing:
+                    st.error(f"❌ Gagal menambah: Jam {start_time}-{end_time} bentrok dengan reservasi {existing.customer_name} ({existing.start_time}-{existing.end_time})!")
+                else:
+                    max_id = db_add.query(func.max(Booking.id)).scalar() or 0
+                    next_id = max_id + 1
+                    
+                    new_booking = Booking(
+                        id=next_id,
+                        court_id=court_id,
+                        customer_phone=phone_number.strip() or "Manual Owner",
+                        customer_name=customer_name.strip(),
+                        booking_date=date_str,
+                        start_time=start_time,
+                        end_time=end_time,
+                        status=status_choice,
+                        payment_status="paid" if status_choice == "confirmed" else "pending"
+                    )
+                    db_add.add(new_booking)
+                    db_add.commit()
+                    st.success(f"✅ Reservasi atas nama {customer_name.strip()} berhasil ditambahkan!")
+                    st.rerun()
+            except Exception as e:
+                db_add.rollback()
+                st.error(f"❌ Terjadi kesalahan saat menyimpan: {str(e)}")
+            finally:
+                db_add.close()
+
 # Dialog Konfirmasi Hapus
 @st.dialog("⚠️ Konfirmasi Hapus Reservasi")
 def show_delete_dialog(booking_id: int, customer: str, court_name: str, time_slot: str):
@@ -547,7 +618,8 @@ else:
                 if b2.button("🗑️ Hapus", key=f"del_c1_{s.time}_{s.court_1_booking_id}", use_container_width=True):
                     show_delete_dialog(s.court_1_booking_id, s.court_1_customer or "Customer", settings.COURT_1_NAME, s.time)
             else:
-                st.markdown("*-*")
+                if st.button("➕ Tambah Manual", key=f"add_c1_{s.time}", use_container_width=True):
+                    show_add_dialog(1, settings.COURT_1_NAME, s.time, date_str)
 
         # Court 2 Status Badge
         status_c2_label = "🟢 Tersedia" if s.court_2_status == "Available" else ("🟡 Pending" if s.court_2_status == "Pending Payment" else "🔴 Terpesan")
@@ -563,7 +635,8 @@ else:
                 if b4.button("🗑️ Hapus", key=f"del_c2_{s.time}_{s.court_2_booking_id}", use_container_width=True):
                     show_delete_dialog(s.court_2_booking_id, s.court_2_customer or "Customer", settings.COURT_2_NAME, s.time)
             else:
-                st.markdown("*-*")
+                if st.button("➕ Tambah Manual", key=f"add_c2_{s.time}", use_container_width=True):
+                    show_add_dialog(2, settings.COURT_2_NAME, s.time, date_str)
 
         st.markdown("<hr style='margin: 6px 0; border-color: rgba(255,255,255,0.08);'>", unsafe_allow_html=True)
 
