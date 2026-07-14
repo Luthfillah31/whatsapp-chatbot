@@ -54,6 +54,39 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
     {
         "type": "function",
         "function": {
+            "name": "search_available_slots",
+            "description": "Search and list all available time slots and hours across one date or a date range (e.g. minggu ini, minggu depan, bulan ini). ALWAYS use this tool when the user asks questions like 'kapan saja yang kosong minggu depan?', 'hari apa saja yang kosong di atas jam 5?', 'besok jam berapa aja yang kosong?', or searching availability across multiple hours or days.",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "start_date": {
+                        "type": "string",
+                        "description": "Start date to search in YYYY-MM-DD format (e.g., '2026-07-14')."
+                    },
+                    "end_date": {
+                        "type": "string",
+                        "description": "Optional end date in YYYY-MM-DD format for searching across multiple days/weeks (e.g., '2026-07-20'). Defaults to start_date if omitted."
+                    },
+                    "min_hour": {
+                        "type": "integer",
+                        "description": "Minimum hour filter in 24-hour format (0-23). E.g., for 'di atas jam 5 sore / malam', pass 17. Defaults to 6 (06:00)."
+                    },
+                    "max_hour": {
+                        "type": "integer",
+                        "description": "Maximum hour filter in 24-hour format (0-23). Defaults to 21 (21:00)."
+                    },
+                    "court_id": {
+                        "type": "integer",
+                        "description": "Optional court filter (1 for Lapangan A, 2 for Lapangan B). Omit to check both courts."
+                    }
+                },
+                "required": ["start_date"]
+            }
+        }
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "check_calendar_date",
             "description": "Checks the exact official day of the week (e.g. Senin, Selasa, Minggu) for any date in YYYY-MM-DD format.",
             "parameters": {
@@ -281,8 +314,11 @@ IDENTITAS PENGGUNA AKTIF:
 Sebelum Anda mengeksekusi aksi yang membuat, mengubah, atau membatalkan pesanan (book_court, cancel_booking, reschedule_booking), Anda WAJIB menampilkan ringkasan detail pesanan dan meminta konfirmasi persetujuan terlebih dahulu kepada warga, KECUALI warga sudah secara eksplisit membalas pesan konfirmasi Anda ("ya lanjutkan", "oke setuju", "ya batalkan", "betul").
 
 ===== ALUR PELAYANAN RESERVASI WARGA =====
-1. CEK JADWAL KOSONG & KETERSEDIAAN:
-   - Jika warga menanyakan ketersediaan lapangan pada jam tertentu (terutama jika menyebut rentang jam seperti "16 sampe 18" atau durasi main), Anda WAJIB memanggil tool 'check_court_availability' dengan mengisi parameter 'time_slot' (misal '16:00') DAN 'duration_hours' (misal 2).
+1. CEK JADWAL KOSONG & PENCARIAN KETERSEDIAAN:
+   - Jika warga menanyakan ketersediaan pada tanggal & jam spesifik (misal "besok jam 16:00 sampai 18:00 kosong?"), panggil tool 'check_court_availability'.
+   - JIKA WARGA BERTANYA PENCARIAN ATAU MENCARI JADWAL KOSONG (misal "besok jam berapa aja yang kosong?", "minggu depan hari apa yang kosong?", "bulan ini di atas jam 5 sore yang kosong hari apa?"):
+     Anda WAJIB memanggil tool 'search_available_slots'. Tool ini akan mengembalikan daftar lengkap tanggal DAN jam spesifik yang kosong di Lapangan A dan Lapangan B.
+     SAAT MENJAWAB WARGA DARI HASIL 'search_available_slots', Anda WAJIB MENYEBUTKAN HARI, TANGGAL, LAPANGAN, DAN DAFTAR JAM SPESIFIK YANG KOSONG (misal: "Rabu 15 Juli: Lapangan B kosong jam 17:00, 19:00, 20:00"). DILARANG KERAS hanya menyebutkan nama hari/lapangan tanpa menyertakan jamnya!
    - SAAT MENJAWAB INFORMASI KETERSEDIAAN UNTUK DURASI LEBIH DARI 1 JAM (>1 jam):
      Anda WAJIB MENCANTUMKAN TOTAL BIAYA SELURUH DURASI DAN RINCIAN TARIFNYA SESUAI HASIL TOOL (contoh: "Total Rp 155.000 untuk 2 jam (16:00-17:00 Rp 75.000 + 17:00-18:00 Rp 80.000)").
      DILARANG KERAS hanya menuliskan tarif 1 jam pertama (seperti "Rp 75.000/jam") jika warga memesan 2 jam atau lebih karena sangat menyesatkan!
@@ -435,6 +471,17 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
             duration_hours=dur
         )
         return res.model_dump()
+
+    elif tool_name == "search_available_slots":
+        c_id = _extract_court_id(arguments.get("court_id"), default=None)
+        return calendar_service.search_available_slots(
+            db=db,
+            start_date=arguments["start_date"],
+            end_date=arguments.get("end_date"),
+            min_hour=int(arguments.get("min_hour", 6)),
+            max_hour=int(arguments.get("max_hour", 21)),
+            court_id=c_id
+        )
 
     elif tool_name == "book_court":
         slot = _extract_slot(arguments)

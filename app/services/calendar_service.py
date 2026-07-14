@@ -965,3 +965,101 @@ def confirm_payment(db: Session, booking_id: int) -> bool:
     db.commit()
     logger.info(f"Payment confirmed for Booking #{booking_id}")
     return True
+
+
+def search_available_slots(
+    db: Session,
+    start_date: str,
+    end_date: Optional[str] = None,
+    min_hour: int = 6,
+    max_hour: int = 21,
+    court_id: Optional[int] = None
+) -> Dict[str, Any]:
+    """Scans and returns all free hours for Lapangan A and Lapangan B across one or multiple dates."""
+    if not end_date:
+        end_date = start_date
+
+    try:
+        dt_start = datetime.datetime.strptime(start_date, "%Y-%m-%d").date()
+        dt_end = datetime.datetime.strptime(end_date, "%Y-%m-%d").date()
+    except Exception:
+        return {
+            "status": "error",
+            "message": "Format tanggal salah. Gunakan YYYY-MM-DD."
+        }
+
+    if dt_end < dt_start:
+        dt_end = dt_start
+
+    days_count = (dt_end - dt_start).days + 1
+    if days_count > 14:
+        dt_end = dt_start + datetime.timedelta(days=13)
+
+    min_h = max(0, min(23, int(min_hour)))
+    max_h = max(min_h, min(23, int(max_hour)))
+
+    results = []
+    curr = dt_start
+    while curr <= dt_end:
+        date_str = curr.strftime("%Y-%m-%d")
+        day_name = get_indonesian_day_name(curr)
+
+        bookings = db.query(Booking).filter(
+            Booking.booking_date == date_str,
+            Booking.status.in_(["confirmed", "pending_payment"])
+        ).all()
+
+        c1_booked_hours = set()
+        c2_booked_hours = set()
+
+        for b in bookings:
+            try:
+                sh = int(b.start_time.split(":")[0])
+                eh = int(b.end_time.split(":")[0])
+                for h in range(sh, max(sh + 1, eh)):
+                    if b.court_id == 1:
+                        c1_booked_hours.add(h)
+                    elif b.court_id == 2:
+                        c2_booked_hours.add(h)
+            except Exception:
+                pass
+
+        c1_free = []
+        c2_free = []
+        for h in range(min_h, max_h + 1):
+            slot_str = f"{h:02d}:00"
+            if h not in c1_booked_hours and (court_id is None or court_id == 1):
+                c1_free.append(slot_str)
+            if h not in c2_booked_hours and (court_id is None or court_id == 2):
+                c2_free.append(slot_str)
+
+        results.append({
+            "date": date_str,
+            "day_name": day_name,
+            "lapangan_A_free_slots": c1_free if (court_id is None or court_id == 1) else None,
+            "lapangan_B_free_slots": c2_free if (court_id is None or court_id == 2) else None
+        })
+
+        curr += datetime.timedelta(days=1)
+
+    lines = [f"Daftar Jadwal Kosong dari {start_date} s/d {dt_end.strftime('%Y-%m-%d')} (Rentang jam {min_h:02d}:00 - {max_h:02d}:00):\n"]
+    for r in results:
+        lines.append(f"📅 *{r['day_name']}, {r['date']}*:")
+        if r['lapangan_A_free_slots'] is not None:
+            a_slots = ", ".join(r['lapangan_A_free_slots']) if r['lapangan_A_free_slots'] else "Penuh"
+            lines.append(f"  - Lapangan A: {a_slots}")
+        if r['lapangan_B_free_slots'] is not None:
+            b_slots = ", ".join(r['lapangan_B_free_slots']) if r['lapangan_B_free_slots'] else "Penuh"
+            lines.append(f"  - Lapangan B: {b_slots}")
+        lines.append("")
+
+    summary_text = "\n".join(lines)
+
+    return {
+        "status": "success",
+        "search_range": f"{start_date} to {dt_end.strftime('%Y-%m-%d')}",
+        "min_hour": f"{min_h:02d}:00",
+        "max_hour": f"{max_h:02d}:00",
+        "days": results,
+        "summary": summary_text
+    }

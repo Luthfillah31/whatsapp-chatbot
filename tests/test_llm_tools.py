@@ -20,10 +20,11 @@ def test_db():
 def test_tools_schema_validity():
     """Verify that all tools defined for OpenRouter follow the required schema format."""
     assert isinstance(TENNIS_TOOLS, list)
-    assert len(TENNIS_TOOLS) == 7
+    assert len(TENNIS_TOOLS) == 8
 
     tool_names = [str(t.get("function", {}).get("name")) for t in TENNIS_TOOLS if isinstance(t, dict) and isinstance(t.get("function"), dict)]
     assert "check_court_availability" in tool_names
+    assert "search_available_slots" in tool_names
     assert "check_calendar_date" in tool_names
     assert "book_court" in tool_names
     assert "cancel_booking" in tool_names
@@ -291,6 +292,25 @@ def test_reschedule_booking_partial_args(test_db):
     assert resched_res["payment_status"] == "paid"
     assert resched_res["payment_url"] is None
     assert resched_res["total_amount"] == 0
+
+
+def test_search_available_slots(test_db):
+    res = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={
+            "start_date": "2026-07-20",
+            "end_date": "2026-07-22",
+            "min_hour": 17,
+            "max_hour": 21
+        },
+        default_phone="+628123456"
+    )
+    assert res["status"] == "success"
+    assert len(res["days"]) == 3
+    assert "Daftar Jadwal Kosong" in res["summary"]
+    assert "17:00" in res["days"][0]["lapangan_A_free_slots"]
+
 
 
 
