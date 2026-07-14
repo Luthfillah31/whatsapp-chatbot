@@ -461,7 +461,7 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 old_end_h = int(b.end_time.split(":")[0])
                 duration_h = max(1, old_end_h - old_start_h)
 
-                safe_new_time = str(new_time or old_time)
+                safe_new_time = new_time or old_time
                 new_start_h = int(safe_new_time.split(":")[0])
                 new_end_h = new_start_h + duration_h
                 new_end = f"{new_end_h:02d}:00"

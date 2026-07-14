@@ -995,8 +995,8 @@ def search_available_slots(
     if days_count > 14:
         dt_end = dt_start + datetime.timedelta(days=13)
 
-    min_h = max(0, min(23, int(min_hour)))
-    max_h = max(min_h, min(23, int(max_hour)))
+    min_h = max(0, min(23, min_hour))
+    max_h = max(min_h, min(23, max_hour))
 
     results = []
     curr = dt_start
