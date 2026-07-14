@@ -1,7 +1,7 @@
 import pytest
 from sqlalchemy import create_engine
 from sqlalchemy.orm import sessionmaker
-from app.models.db_models import Base
+from app.models.db_models import Base, Booking
 from app.services.llm_service import TENNIS_TOOLS, execute_tool_call
 
 
@@ -310,6 +310,104 @@ def test_search_available_slots(test_db):
     assert len(res["days"]) == 3
     assert "Daftar Jadwal Kosong" in res["summary"]
     assert "17:00" in res["days"][0]["lapangan_A_free_slots"]
+
+
+def test_scenario_1_hari_kosong_jam_7_malam(test_db):
+    """
+    Skenario 1: User bertanya "Hari kosong jam 7 malam" (19:00).
+    Kita buat reservasi di Lapangan A jam 19:00 pada 2026-07-14.
+    Hasil pencarian harus menunjukkan:
+    - 2026-07-14: Lapangan A tidak mencantumkan 19:00, Lapangan B memiliki 19:00.
+    - Hari berikutnya: Lapangan A & B memiliki 19:00.
+    """
+    booking = Booking(
+        court_id=1,
+        booking_date="2026-07-14",
+        start_time="19:00",
+        end_time="20:00",
+        customer_name="Pemesan Tes 1",
+        customer_phone="0811111",
+        status="confirmed",
+        payment_status="paid"
+    )
+    test_db.add(booking)
+    test_db.commit()
+
+    res = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={
+            "start_date": "2026-07-14",
+            "end_date": "2026-07-16",
+            "min_hour": 19,
+            "max_hour": 19
+        },
+        default_phone="0811111"
+    )
+
+    assert res["status"] == "success"
+    # Pada 2026-07-14, Lapangan A terisi di 19:00
+    assert "19:00" not in res["days"][0]["lapangan_A_free_slots"]
+    # Lapangan B kosong di 19:00
+    assert "19:00" in res["days"][0]["lapangan_B_free_slots"]
+    # Pada 2026-07-15, Lapangan A & B kosong di 19:00
+    assert "19:00" in res["days"][1]["lapangan_A_free_slots"]
+    assert "19:00" in res["days"][1]["lapangan_B_free_slots"]
+
+
+def test_scenario_2_bulan_ini_diatas_jam_5_yg_kosong_hari_apa(test_db):
+    """
+    Skenario 2: User bertanya "Bulan ini diatas jam 5 yg kosong hari apa?" (min_hour=17, max_hour=21).
+    Memindai rentang tanggal dan mengembalikan daftar hari beserta slot jam sore/malam
+    yang tersedia di Lapangan A dan Lapangan B.
+    """
+    res = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={
+            "start_date": "2026-07-14",
+            "end_date": "2026-07-24",
+            "min_hour": 17,
+            "max_hour": 21
+        },
+        default_phone="0811111"
+    )
+
+    assert res["status"] == "success"
+    assert len(res["days"]) >= 1
+    # Memastikan rentang jam 17:00 - 21:00 tercantum
+    assert "17:00" in res["days"][0]["lapangan_A_free_slots"]
+    assert "21:00" in res["days"][0]["lapangan_A_free_slots"]
+    assert "Rentang jam 17:00 - 21:00" in res["summary"]
+
+
+def test_scenario_3_minggu_depan_yg_kosong_hari_apa_dan_jam_berapa(test_db):
+    """
+    Skenario 3: User bertanya "Minggu depan yg kosong hari apa dan jam berapa?".
+    Memindai 7 hari minggu depan (misal 2026-07-20 s/d 2026-07-26).
+    Summary wajib mencantumkan nama hari, tanggal, DAN daftar jam spesifik yang kosong
+    untuk Lapangan A dan Lapangan B agar chatbot menjawab dengan lengkap dan akurat.
+    """
+    res = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={
+            "start_date": "2026-07-20",
+            "end_date": "2026-07-26",
+            "min_hour": 6,
+            "max_hour": 21
+        },
+        default_phone="0811111"
+    )
+
+    assert res["status"] == "success"
+    assert len(res["days"]) == 7
+    # Memeriksa hari pertama (Senin, 2026-07-20)
+    assert res["days"][0]["day_name"] == "Senin"
+    assert "06:00" in res["days"][0]["lapangan_A_free_slots"]
+    assert "21:00" in res["days"][0]["lapangan_B_free_slots"]
+    assert "Senin, 2026-07-20" in res["summary"]
+
 
 
 
