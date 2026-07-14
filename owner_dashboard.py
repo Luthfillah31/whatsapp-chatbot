@@ -334,8 +334,12 @@ def show_delete_dialog(booking_id: int, customer: str, court_name: str, time_slo
 # Dialog Konfirmasi Pindah Jadwal
 @st.dialog("↔️ Pindahkan Jadwal Reservasi")
 def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time: str, date_str: str):
-    st.write("Pilih jadwal & lapangan baru untuk memindahkan reservasi ini:")
-    st.markdown(f"**Pemesan**: **{customer}** | **Jadwal Lama**: Lapangan {'A' if old_court_id == 1 else 'B'} ({old_time})")
+    st.write("Pilih tanggal, lapangan, & jam baru untuk memindahkan reservasi ini:")
+    st.markdown(f"**Pemesan**: **{customer}** | **Jadwal Lama**: {date_str} - Lapangan {'A' if old_court_id == 1 else 'B'} ({old_time})")
+
+    current_date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
+    new_date = st.date_input("📅 Pilih Tanggal Tujuan:", value=current_date_obj)
+    new_date_str = new_date.strftime("%Y-%m-%d")
 
     new_court = st.selectbox(
         "🎾 Pilih Lapangan Tujuan:",
@@ -345,7 +349,7 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
     all_hours = [f"{h:02d}:00" for h in range(5, 23)]
     new_time = st.selectbox("⏰ Pilih Jam Mulai Baru:", options=all_hours, index=all_hours.index(old_time) if old_time in all_hours else 0)
 
-    st.warning(f"Konfirmasi Pindah: Dari Lapangan {'A' if old_court_id==1 else 'B'} ({old_time}) ➔ Lapangan {'A' if new_court==1 else 'B'} ({new_time})")
+    st.warning(f"Konfirmasi Pindah:\n- **Dari**: {date_str} | Lapangan {'A' if old_court_id==1 else 'B'} ({old_time})\n- **Ke**: {new_date_str} | Lapangan {'A' if new_court==1 else 'B'} ({new_time})")
 
     col1, col2 = st.columns(2)
     with col1:
@@ -361,22 +365,23 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 new_end = f"{end_h:02d}:00"
 
                 existing = db_mov.query(Booking).filter(
-                    Booking.booking_date == date_str,
+                    Booking.booking_date == new_date_str,
                     Booking.court_id == new_court,
                     Booking.start_time == new_time,
                     Booking.id != booking_id
                 ).first()
 
                 if existing:
-                    st.error(f"Gagal memindahkan: Lapangan dan jam tersebut sudah terisi oleh {existing.customer_name}!")
+                    st.error(f"Gagal memindahkan: Pada tanggal {new_date_str}, lapangan dan jam tersebut sudah terisi oleh {existing.customer_name}!")
                 else:
                     b = db_mov.query(Booking).filter(Booking.id == booking_id).first()
                     if b:
+                        b.booking_date = new_date_str
                         b.court_id = new_court
                         b.start_time = new_time
                         b.end_time = new_end
                         db_mov.commit()
-                        st.success("Jadwal berhasil dipindahkan!")
+                        st.success(f"Jadwal berhasil dipindahkan ke {new_date_str}!")
                         st.rerun()
             finally:
                 db_mov.close()
