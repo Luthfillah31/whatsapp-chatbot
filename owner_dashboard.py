@@ -320,17 +320,17 @@ def show_add_dialog(court_id: int, court_name: str, start_time: str, date_str: s
     customer_name = st.text_input("👤 Nama Pemesan / Customer:", placeholder="Contoh: Bapak Budi / Komunitas ABC")
     phone_number = st.text_input("📱 Nomor WhatsApp / HP:", value="081234567890", placeholder="08...")
     
-    duration_hours = st.selectbox("⏳ Durasi Reservasi (Jam):", options=[1, 2, 3, 4], index=0)
+    duration_hours = int(st.selectbox("⏳ Durasi Reservasi (Jam):", options=[1, 2, 3, 4], index=0) or 1)
     
     start_h = int(start_time.split(":")[0])
     end_h = min(23, start_h + duration_hours)
     end_time = f"{end_h:02d}:00"
     
-    status_choice = st.selectbox(
+    status_choice = str(st.selectbox(
         "📌 Status Pembayaran:",
         options=["confirmed", "pending_payment"],
         format_func=lambda x: "🟢 Confirmed (Sudah Bayar / Terkonfirmasi)" if x == "confirmed" else "🟡 Pending Payment (Belum Bayar)"
-    )
+    ) or "confirmed")
     
     st.info(f"📋 **Ringkasan Jadwal Baru**:\n- **Tanggal**: `{date_str}`\n- **Lapangan**: `{court_name}`\n- **Waktu**: `{start_time} - {end_time}` ({duration_hours} Jam)\n- **Status**: `{status_choice.upper()}`")
     
@@ -431,7 +431,7 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
         index=date_options.index(current_date_obj) if current_date_obj in date_options else 0,
         format_func=lambda d: f"{d.strftime('%Y-%m-%d')} ({d.strftime('%d %B %Y')})"
     )
-    new_date_str = new_date.strftime("%Y-%m-%d")
+    new_date_str = new_date.strftime("%Y-%m-%d") if new_date else date_str
 
     new_court = st.selectbox(
         "🎾 Pilih Lapangan Tujuan:",
@@ -461,7 +461,8 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 old_end_h = int(b.end_time.split(":")[0])
                 duration_h = max(1, old_end_h - old_start_h)
 
-                new_start_h = int(new_time.split(":")[0])
+                safe_new_time = str(new_time or old_time)
+                new_start_h = int(safe_new_time.split(":")[0])
                 new_end_h = new_start_h + duration_h
                 new_end = f"{new_end_h:02d}:00"
 
