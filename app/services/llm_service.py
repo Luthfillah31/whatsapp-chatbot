@@ -265,7 +265,7 @@ INFORMASI PENTING KOMPLEK PERUMAHAN:
       • Jam 17:00 - 18:00 (1 jam Malam) = Rp 80.000
       • TOTAL BIAYA = Rp 230.000.
     - Anda WAJIB memeriksa apakah jam bermain melewati pukul 17:00 dan menghitung total biaya secara teliti jam per jam!
-- Fasilitas: '{settings.COURT_1_NAME}' (court_id=1) dan '{settings.COURT_2_NAME}' (court_id=2). Gunakan sebutan Lapangan A dan Lapangan B saat menjawab warga.
+- Fasilitas: '{settings.COURT_1_NAME}' (ID sistem: 1) dan '{settings.COURT_2_NAME}' (ID sistem: 2). PERINGATAN: Gunakan sebutan alami "Lapangan A" dan "Lapangan B" saja saat menjawab warga. DILARANG KERAS menuliskan teks "(court_id=1)" atau "(court_id=2)" dalam pesan kepada warga!
 
 IDENTITAS PENGGUNA AKTIF:
 - ID Kontak warga saat ini: {sender_phone}
@@ -362,10 +362,15 @@ def _extract_slot(args: Dict[str, Any], default: str = "") -> str:
 def _extract_court_id(val: Any, default: Optional[int] = None) -> Optional[int]:
     if val is None:
         return default
-    if isinstance(val, int):
+    if isinstance(val, int) and val in [1, 2]:
         return val
-    digits = re.findall(r'\d+', str(val))
-    if digits:
+    s = str(val).upper().strip()
+    if any(k in s for k in ['B', '2', 'SECOND', 'DUA']):
+        return 2
+    if any(k in s for k in ['A', '1', 'FIRST', 'SATU']):
+        return 1
+    digits = re.findall(r'\d+', s)
+    if digits and int(digits[0]) in [1, 2]:
         return int(digits[0])
     return default
 
