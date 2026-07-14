@@ -20,7 +20,7 @@ def test_db():
 def test_tools_schema_validity():
     """Verify that all tools defined for OpenRouter follow the required schema format."""
     assert isinstance(TENNIS_TOOLS, list)
-    assert len(TENNIS_TOOLS) == 8
+    assert len(TENNIS_TOOLS) == 9
 
     tool_names = [str(t.get("function", {}).get("name")) for t in TENNIS_TOOLS if isinstance(t, dict) and isinstance(t.get("function"), dict)]
     assert "check_court_availability" in tool_names
@@ -31,6 +31,7 @@ def test_tools_schema_validity():
     assert "reschedule_booking" in tool_names
     assert "list_my_bookings" in tool_names
     assert "find_booking_by_verification" in tool_names
+    assert "get_club_information" in tool_names
 
     for tool in TENNIS_TOOLS:
         assert isinstance(tool, dict)
@@ -405,6 +406,88 @@ def test_scenario_3_minggu_depan_yg_kosong_hari_apa_dan_jam_berapa(test_db):
     assert "05:00" in res["days"][0]["lapangan_A_free_slots"]
     assert "22:00" in res["days"][0]["lapangan_B_free_slots"]
     assert "Senin, 2026-07-20" in res["summary"]
+
+
+def test_get_club_information_tool(test_db):
+    """
+    Memastikan tool get_club_information mengembalikan rincian lengkap dan akurat
+    untuk FAQ harga, jam operasional, cara booking, dan kebijakan weekday vs weekend.
+    """
+    topics = ["pricing", "hours", "booking_procedure", "recurring_booking", "location", "general"]
+    for topic in topics:
+        res = execute_tool_call(
+            db=test_db,
+            tool_name="get_club_information",
+            arguments={"topic": topic},
+            default_phone="0811111"
+        )
+        assert res["status"] == "success"
+        assert res["topic_requested"] == topic
+        info = res["information"]
+        assert "05:00 - 23:00 WIB" in info["operating_hours"]
+        assert "75.000" in info["pricing_rates"]["daytime_05_to_17"]
+        assert "80.000" in info["pricing_rates"]["evening_17_to_23"]
+        assert "TIDAK ADA PERBEDAAN HARGA" in info["pricing_rates"]["weekday_vs_weekend_difference"]
+        assert "booking rutin berulang" in info["recurring_booking_policy"].lower()
+
+
+def test_user_faq_and_booking_scenarios_tools(test_db):
+    """
+    Memeriksa eksekusi tool untuk skenario-skenario pertanyaan user:
+    1. "lapangan hari ini jam 4 sore atau jam 5 kosong gak?" -> search_available_slots min_hour=16, max_hour=17
+    3. "besok pagi jam 7, Lapangan 1 atau Lapangan 2 ada yang available?" -> check_court_availability time_slot=07:00, court_id=None
+    4. "booking rutin tiap hari Sabtu jam 8 pagi buat sebulan ke depan bisa?" -> search_available_slots min_hour=8, max_hour=8 untuk rentang sebulan
+    5. "Hari Minggu besok jadwal yang kosong jam berapa aja?" -> search_available_slots start_date="2026-07-19"
+    """
+    # Skenario 1: Cek jam 16:00 & 17:00 hari ini
+    res_s1 = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={"start_date": "2026-07-14", "min_hour": 16, "max_hour": 17},
+        default_phone="0811111"
+    )
+    assert res_s1["status"] == "success"
+    assert "16:00" in res_s1["days"][0]["lapangan_A_free_slots"]
+    assert "17:00" in res_s1["days"][0]["lapangan_B_free_slots"]
+
+    # Skenario 3: Cek jam 07:00 untuk Lapangan 1 (A) & Lapangan 2 (B) sekaligus
+    res_s3 = execute_tool_call(
+        db=test_db,
+        tool_name="check_court_availability",
+        arguments={"date": "2026-07-15", "time_slot": "07:00", "duration_hours": 1},
+        default_phone="0811111"
+    )
+    assert res_s3["court_1_available"] is True
+    assert res_s3["court_2_available"] is True
+    assert ("tersedia" in res_s3["summary_text"].lower() or "available" in res_s3["summary_text"].lower())
+
+    # Skenario 4: Cek jadwal jam 08:00 pada hari-hari Sabtu untuk sebulan ke depan
+    res_s4 = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={"start_date": "2026-07-18", "end_date": "2026-08-15", "min_hour": 8, "max_hour": 8},
+        default_phone="0811111"
+    )
+    assert res_s4["status"] == "success"
+    # Filter hanya hari Sabtu
+    saturdays = [d for d in res_s4["days"] if d["day_name"] == "Sabtu"]
+    assert len(saturdays) >= 4
+    for sat in saturdays:
+        assert "08:00" in sat["lapangan_A_free_slots"]
+        assert "08:00" in sat["lapangan_B_free_slots"]
+
+    # Skenario 5: Cek Hari Minggu besok (2026-07-19)
+    res_s5 = execute_tool_call(
+        db=test_db,
+        tool_name="search_available_slots",
+        arguments={"start_date": "2026-07-19"},
+        default_phone="0811111"
+    )
+    assert res_s5["status"] == "success"
+    assert res_s5["days"][0]["day_name"] == "Minggu"
+    assert "05:00" in res_s5["days"][0]["lapangan_A_free_slots"]
+    assert "22:00" in res_s5["days"][0]["lapangan_B_free_slots"]
+
 
 
 

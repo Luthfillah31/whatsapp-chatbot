@@ -25,7 +25,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "check_court_availability",
-            "description": "Check if Lapangan A (court_id=1) and/or Lapangan B (court_id=2) are available on a specific date, start time slot, and duration. ALWAYS pass duration_hours when checking multi-hour availability (e.g. '16:00 to 18:00' -> duration_hours=2).",
+            "description": "Check if Lapangan A (court_id=1) and/or Lapangan B (court_id=2) are available on a specific date, start time slot, and duration. ALWAYS pass duration_hours when checking multi-hour availability (e.g. '16:00 to 18:00' -> duration_hours=2). If checking 'either court' or 'Lapangan 1 atau Lapangan 2', omit court_id (pass null) to check both courts simultaneously.",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -43,7 +43,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     },
                     "court_id": {
                         "type": "integer",
-                        "description": "Optional court number (1 or 2). If omitted, checks both courts.",
+                        "description": "Optional court number (1 for Lapangan A/1, 2 for Lapangan B/2). If omitted or when checking 'either court', checks both courts.",
                         "enum": [1, 2]
                     }
                 },
@@ -55,7 +55,7 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
         "type": "function",
         "function": {
             "name": "search_available_slots",
-            "description": "Search and list all available time slots and hours across one date or a date range (e.g. minggu ini, minggu depan, bulan ini). ALWAYS use this tool when the user asks questions like 'kapan saja yang kosong minggu depan?', 'hari apa saja yang kosong di atas jam 5?', 'besok jam berapa aja yang kosong?', or searching availability across multiple hours or days.",
+            "description": "Search and list all available time slots and hours across one date or a date range. ALWAYS use this tool when the user asks: (1) for available slots across days/weeks ('besok jam berapa aja yang kosong?', 'Hari Minggu besok jadwal yang kosong jam berapa aja?'), (2) checking multiple specific hour choices ('jam 4 sore atau jam 5 kosong gak?'), or (3) scanning upcoming Saturdays/dates for recurring bookings ('booking rutin tiap Sabtu?').",
             "parameters": {
                 "type": "object",
                 "properties": {
@@ -227,6 +227,23 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                 "required": ["customer_phone", "customer_name"]
             }
         }
+    },
+    {
+        "type": "function",
+        "function": {
+            "name": "get_club_information",
+            "description": "Get official club information and policies without checking calendar schedules. Use when the user asks general FAQ questions about pricing/rates ('berapa harga per jam?', 'beda weekday dan weekend?'), operating hours ('buka jam berapa?'), booking procedures ('cara booking gimana?'), recurring bookings ('booking rutin tiap minggu?'), or location ('alamat dimana?').",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "topic": {
+                        "type": "string",
+                        "description": "Topic of inquiry.",
+                        "enum": ["pricing", "hours", "booking_procedure", "recurring_booking", "location", "general"]
+                    }
+                }
+            }
+        }
     }
 ]
 
@@ -344,6 +361,33 @@ Sebelum Anda mengeksekusi aksi yang membuat, mengubah, atau membatalkan pesanan 
      c) Tampilkan detail pesanan yang akan dibatalkan (*ID Booking*, *Lapangan*, *Tanggal*, *Jam*) dan tanyakan konfirmasi: "Apakah Bapak/Ibu yakin ingin membatalkan reservasi tersebut?"
      d) BARU panggil tool 'cancel_booking' setelah warga membalas yakin/setuju untuk membatalkan ("ya batalkan", "yakin", "iya batal").
 6. RESET MEMORI: Jika warga ingin hapus history, arahkan untuk mengetik **/reset**, **/clear**, atau **/start**.
+
+===== PANDUAN MENJAWAB FAQ & SKENARIO PERTANYAAN WARGA (WAJIB DIPATUHI!) =====
+1. PERTANYAAN PILIHAN JAM ("jam 4 sore atau jam 5 kosong gak?"):
+   - Gunakan tool 'search_available_slots' (dengan min_hour=16, max_hour=17 pada tanggal terkait) agar sistem langsung memeriksa kedua jam tersebut di Lapangan A dan Lapangan B sekaligus, lalu sampaikan status jam 16:00 dan 17:00 secara jelas kepada warga.
+2. PERTANYAAN PROSEDUR / CARA BOOKING ("Cara booking lapangannya gimana ya?"):
+   - Langsung jelaskan 4 langkah mudah tanpa memanggil tool kalender:
+     • Sebutkan **Hari & Tanggal** yang diinginkan.
+     • Sebutkan **Jam & Durasi** bermain (misal: 16:00 - 18:00).
+     • Pilih fasilitas **Lapangan A atau Lapangan B**.
+     • Sebutkan **Nama Reservasi** Anda.
+     • Setelah jadwal terverifikasi kosong, kami akan membuatkan reservasi beserta tautan pembayaran resmi Midtrans (QRIS/Virtual Account).
+3. PERTANYAAN PILIHAN LAPANGAN ("Besok pagi jam 7, Lapangan 1 atau Lapangan 2 ada yang available?"):
+   - Panggil 'check_court_availability' untuk jam 07:00 dengan mengosongkan (omit/null) parameter court_id agar sistem memeriksa kedua lapangan sekaligus.
+   - Penjelasan nama lapangan: Lapangan 1 adalah Lapangan A, dan Lapangan 2 adalah Lapangan B. Jelaskan status keduanya dengan gamblang.
+4. PERTANYAAN BOOKING RUTIN / BERULANG ("Booking rutin tiap hari Sabtu jam 8 pagi buat sebulan ke depan bisa?"):
+   - Jelaskan bahwa warga sangat bisa melakukan reservasi rutin berulang (misal mingguan/bulanan) dengan memproses sesi per tanggal/minggu.
+   - Tawarkan untuk langsung memindai ketersediaan jam 08:00 pada seluruh hari Sabtu untuk 1 bulan ke depan sekaligus menggunakan 'search_available_slots' (rentang 1 bulan, min_hour=8, max_hour=8) agar warga dapat memilih tanggal mana saja yang tersedia dan langsung dibooking.
+5. PERTANYAAN HARI TERTENTU BERIKUTNYA ("Hari Minggu besok jadwal yang kosong jam berapa aja?"):
+   - Tentukan tanggal YYYY-MM-DD pasti untuk "Hari Minggu besok" (yaitu Hari Minggu terdekat berikutnya setelah hari ini {today_str}), lalu panggil 'search_available_slots(start_date, min_hour=5, max_hour=22)' untuk menampilkan daftar lengkap jam kosong dari pagi hingga malam.
+6. PERTANYAAN HARGA SEWA PER JAM ("Harga sewa lapangannya berapa per jam?"):
+   - Langsung jawab dengan rincian tarif resmi:
+     • **Jam Pagi - Sore (05:00 - 17:00 WIB)**: Rp 75.000 / jam
+     • **Jam Malam (17:00 - 23:00 WIB)**: Rp 80.000 / jam
+7. PERTANYAAN BEDA HARGA WEEKDAY DAN WEEKEND ("Ada beda harga nggak antara weekday dan weekend?"):
+   - Langsung jawab dengan tegas dan jelas: **TIDAK ADA PERBEDAAN HARGA antara Weekday (Senin-Jumat) dan Weekend (Sabtu-Minggu / Hari Libur)**. Tarif berlaku seragam setiap hari, hanya dibedakan berdasarkan sesi jam bermain (Pagi-Sore vs Malam).
+8. PERTANYAAN JAM OPERASIONAL ("Buka dari jam berapa sampai jam berapa min?"):
+   - Langsung jawab: Lapangan Tenis GBM buka **setiap hari (Senin s/d Minggu) dari pukul 05:00 WIB pagi hingga pukul 23:00 WIB malam** (sesi booking terakhir mulai pukul 22:00 WIB).
 
 ===== FORMATTING PESAN UNTUK WHATSAPP (WAJIB DIPATUHI!) =====
 - DILARANG KERAS menggunakan tabel Markdown (seperti | Waktu | Tarif |) karena pesan dikirim via WhatsApp dan tabel Markdown tidak dapat dibaca di HP.
@@ -561,6 +605,30 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
             "bookings": safe_bookings,
             "verification_status": "success" if safe_bookings else "not_found",
             "message": f"Ditemukan tepat {len(safe_bookings)} jadwal reservasi berdasarkan verifikasi 2 variabel."
+        }
+
+    elif tool_name == "get_club_information":
+        topic = arguments.get("topic", "general")
+        info = {
+            "club_name": settings.CLUB_LOCATION_NAME,
+            "operating_hours": f"{settings.CLUB_OPENING_HOUR} - {settings.CLUB_CLOSING_HOUR} WIB setiap hari (Senin - Minggu)",
+            "pricing_rates": {
+                "daytime_05_to_17": f"Rp {settings.HOURLY_RATE_DAYTIME_IDR:,}/jam".replace(",", "."),
+                "evening_17_to_23": f"Rp {settings.HOURLY_RATE_EVENING_IDR:,}/jam".replace(",", "."),
+                "weekday_vs_weekend_difference": "TIDAK ADA PERBEDAAN HARGA antara Weekday (Senin-Jumat) dan Weekend (Sabtu-Minggu / Hari Libur). Tarif seragam setiap hari, hanya dibedakan berdasarkan sesi jam Pagi-Sore vs Malam."
+            },
+            "courts": [
+                {"court_name": settings.COURT_1_NAME, "system_id": 1, "alias": "Lapangan 1 / Lapangan A"},
+                {"court_name": settings.COURT_2_NAME, "system_id": 2, "alias": "Lapangan 2 / Lapangan B"}
+            ],
+            "booking_procedure": "Untuk booking: (1) Sebutkan Hari/Tanggal, (2) Jam & Durasi bermain, (3) Pilih Lapangan A atau B, (4) Sebutkan Nama Reservasi. Kami akan cek ketersediaan dan buatkan reservasi beserta link pembayaran resmi Midtrans/QRIS.",
+            "recurring_booking_policy": "Booking rutin berulang (seperti setiap Sabtu jam 08:00 selama 1 bulan) sangat bisa dilakukan. Sistem dapat memindai ketersediaan seluruh hari Sabtu untuk sebulan ke depan sekaligus agar warga langsung melihat tanggal mana saja yang kosong dan memproses pesanannya.",
+            "location_url": settings.CLUB_LOCATION_URL
+        }
+        return {
+            "topic_requested": topic,
+            "status": "success",
+            "information": info
         }
 
     else:
