@@ -971,8 +971,8 @@ def search_available_slots(
     db: Session,
     start_date: str,
     end_date: Optional[str] = None,
-    min_hour: int = 6,
-    max_hour: int = 21,
+    min_hour: int = 5,
+    max_hour: int = 22,
     court_id: Optional[int] = None
 ) -> Dict[str, Any]:
     """Scans and returns all free hours for Lapangan A and Lapangan B across one or multiple dates."""

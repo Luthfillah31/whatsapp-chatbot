@@ -69,11 +69,11 @@ TENNIS_TOOLS: List[Dict[str, Any]] = [
                     },
                     "min_hour": {
                         "type": "integer",
-                        "description": "Minimum hour filter in 24-hour format (0-23). E.g., for 'di atas jam 5 sore / malam', pass 17. Defaults to 6 (06:00)."
+                        "description": "Minimum hour filter in 24-hour format (0-23). E.g., for 'di atas jam 5 sore / malam', pass 17. Defaults to 5 (05:00)."
                     },
                     "max_hour": {
                         "type": "integer",
-                        "description": "Maximum hour filter in 24-hour format (0-23). Defaults to 21 (21:00)."
+                        "description": "Maximum hour filter in 24-hour format (0-23). Defaults to 22 (22:00)."
                     },
                     "court_id": {
                         "type": "integer",
@@ -478,8 +478,8 @@ def execute_tool_call(db: Session, tool_name: str, arguments: Dict[str, Any], de
             db=db,
             start_date=arguments["start_date"],
             end_date=arguments.get("end_date"),
-            min_hour=int(arguments.get("min_hour", 6)),
-            max_hour=int(arguments.get("max_hour", 21)),
+            min_hour=int(arguments.get("min_hour", 5)),
+            max_hour=int(arguments.get("max_hour", 22)),
             court_id=c_id
         )
 

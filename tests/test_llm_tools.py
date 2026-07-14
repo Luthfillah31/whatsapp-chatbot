@@ -393,9 +393,7 @@ def test_scenario_3_minggu_depan_yg_kosong_hari_apa_dan_jam_berapa(test_db):
         tool_name="search_available_slots",
         arguments={
             "start_date": "2026-07-20",
-            "end_date": "2026-07-26",
-            "min_hour": 6,
-            "max_hour": 21
+            "end_date": "2026-07-26"
         },
         default_phone="0811111"
     )
@@ -404,8 +402,8 @@ def test_scenario_3_minggu_depan_yg_kosong_hari_apa_dan_jam_berapa(test_db):
     assert len(res["days"]) == 7
     # Memeriksa hari pertama (Senin, 2026-07-20)
     assert res["days"][0]["day_name"] == "Senin"
-    assert "06:00" in res["days"][0]["lapangan_A_free_slots"]
-    assert "21:00" in res["days"][0]["lapangan_B_free_slots"]
+    assert "05:00" in res["days"][0]["lapangan_A_free_slots"]
+    assert "22:00" in res["days"][0]["lapangan_B_free_slots"]
     assert "Senin, 2026-07-20" in res["summary"]
 
 
