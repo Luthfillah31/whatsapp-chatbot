@@ -111,18 +111,33 @@ st.markdown("""
         color: #10b981 !important;
     }
 
-    /* Premium Custom HTML Table & Glassmorphic Badges */
+    /* Premium Custom HTML Table & Glassmorphic Badges (Mobile Responsive Scrollable) */
     .custom-table-container {
         background: rgba(15, 23, 42, 0.6);
         backdrop-filter: blur(16px);
         border: 1px solid rgba(255, 255, 255, 0.08);
         border-radius: 16px;
-        overflow: hidden;
+        overflow-x: auto !important;
+        overflow-y: hidden !important;
+        -webkit-overflow-scrolling: touch !important;
+        width: 100%;
         margin-top: 1.5rem;
         box-shadow: 0 10px 30px rgba(0, 0, 0, 0.3);
     }
+    .custom-table-container::-webkit-scrollbar {
+        height: 10px;
+    }
+    .custom-table-container::-webkit-scrollbar-track {
+        background: rgba(15, 23, 42, 0.85);
+        border-radius: 8px;
+    }
+    .custom-table-container::-webkit-scrollbar-thumb {
+        background: #3b82f6;
+        border-radius: 8px;
+    }
     .custom-table {
         width: 100%;
+        min-width: 780px !important;
         border-collapse: collapse;
         text-align: left;
         color: #f3f4f6;
@@ -535,6 +550,7 @@ edit_mode = st.toggle(
 )
 
 if not edit_mode:
+    st.caption("📱 **Tips Tampilan HP**: Geser (scroll) tabel ke kanan/kiri untuk melihat seluruh kolom Lapangan A & B.")
     # Construct Custom HTML Table (Read-Only Mode)
     html_table = f"""
     <div class="custom-table-container">
