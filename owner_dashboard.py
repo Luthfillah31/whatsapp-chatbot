@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-from datetime import datetime, date
+from datetime import datetime, date, timedelta
 import pandas as pd
 from app.models.db_models import SessionLocal
 from app.services.calendar_service import get_daily_schedule
@@ -338,7 +338,18 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
     st.markdown(f"**Pemesan**: **{customer}** | **Jadwal Lama**: {date_str} - Lapangan {'A' if old_court_id == 1 else 'B'} ({old_time})")
 
     current_date_obj = datetime.strptime(date_str, "%Y-%m-%d").date()
-    new_date = st.date_input("📅 Pilih Tanggal Tujuan:", value=current_date_obj)
+    base_today = date.today()
+    date_options = [base_today + timedelta(days=i) for i in range(-7, 60)]
+    if current_date_obj not in date_options:
+        date_options.append(current_date_obj)
+        date_options.sort()
+
+    new_date = st.selectbox(
+        "📅 Pilih Tanggal Tujuan:",
+        options=date_options,
+        index=date_options.index(current_date_obj) if current_date_obj in date_options else 0,
+        format_func=lambda d: f"{d.strftime('%Y-%m-%d')} ({d.strftime('%d %B %Y')})"
+    )
     new_date_str = new_date.strftime("%Y-%m-%d")
 
     new_court = st.selectbox(
