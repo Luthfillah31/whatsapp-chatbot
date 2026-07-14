@@ -374,16 +374,25 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
 
     col1, col2 = st.columns(2)
     with col1:
-        if st.button("❌ Batal", key="cancel_move", use_container_width=True):
+        if st.button("❌ Batal", key=f"cancel_move_{booking_id}", use_container_width=True):
             st.rerun()
     with col2:
-        if st.button("✅ Ya, Pindahkan Sekarang", type="primary", key="confirm_move", use_container_width=True):
+        if st.button("✅ Ya, Pindahkan Sekarang", type="primary", key=f"confirm_move_{booking_id}", use_container_width=True):
             db_mov = SessionLocal()
             try:
                 from app.models.db_models import Booking
-                safe_time = str(new_time or "07:00")
-                end_h = int(safe_time.split(":")[0]) + 1
-                new_end = f"{end_h:02d}:00"
+                b = db_mov.query(Booking).filter(Booking.id == booking_id).first()
+                if not b:
+                    st.error("Data reservasi tidak ditemukan di database!")
+                    return
+
+                old_start_h = int(b.start_time.split(":")[0])
+                old_end_h = int(b.end_time.split(":")[0])
+                duration_h = max(1, old_end_h - old_start_h)
+
+                new_start_h = int(new_time.split(":")[0])
+                new_end_h = new_start_h + duration_h
+                new_end = f"{new_end_h:02d}:00"
 
                 existing = db_mov.query(Booking).filter(
                     Booking.booking_date == new_date_str,
@@ -394,17 +403,15 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 ).first()
 
                 if existing:
-                    st.error(f"Gagal memindahkan: Pada tanggal {new_date_str}, Lapangan {'A' if new_court == 1 else 'B'} jam {new_time} sudah terisi oleh {existing.customer_name} ({existing.start_time}-{existing.end_time})!")
+                    st.error(f"Gagal memindahkan: Pada tanggal {new_date_str}, Lapangan {'A' if new_court == 1 else 'B'} jam {new_time}-{new_end} bentrok dengan reservasi {existing.customer_name} ({existing.start_time}-{existing.end_time})!")
                 else:
-                    b = db_mov.query(Booking).filter(Booking.id == booking_id).first()
-                    if b:
-                        b.booking_date = new_date_str
-                        b.court_id = new_court
-                        b.start_time = new_time
-                        b.end_time = new_end
-                        db_mov.commit()
-                        st.success(f"Jadwal berhasil dipindahkan ke {new_date_str}!")
-                        st.rerun()
+                    b.booking_date = new_date_str
+                    b.court_id = new_court
+                    b.start_time = new_time
+                    b.end_time = new_end
+                    db_mov.commit()
+                    st.success(f"Jadwal berhasil dipindahkan ke {new_date_str}!")
+                    st.rerun()
             finally:
                 db_mov.close()
 
