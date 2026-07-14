@@ -1,6 +1,6 @@
 import streamlit as st
 import streamlit.components.v1 as components
-import datetime
+from datetime import datetime, date
 import pandas as pd
 from app.models.db_models import SessionLocal
 from app.services.calendar_service import get_daily_schedule
@@ -212,7 +212,7 @@ with ctrl_col1:
     st.markdown("### 📅 Pilih Tanggal Operasional:")
     selected_date = st.date_input(
         "📅 Pilih Tanggal Operasional",
-        value=datetime.date.today(),
+        value=date.today(),
         label_visibility="collapsed",
         help="Pilih tanggal untuk memuat jadwal ketersediaan lapangan real-time dari database."
     )
