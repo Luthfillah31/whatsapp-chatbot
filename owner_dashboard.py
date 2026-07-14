@@ -239,11 +239,21 @@ if action in ["move", "delete"]:
             new_end = f"{end_h:02d}:00"
             b = db_act.query(Booking).filter(Booking.id == booking_id).first()
             if b:
-                b.court_id = new_court
-                b.start_time = new_time
-                b.end_time = new_end
-                db_act.commit()
-                st.toast(f"✅ Jadwal {b.customer_name} berhasil dipindahkan ke Lapangan {new_court} ({new_time})!")
+                existing = db_act.query(Booking).filter(
+                    Booking.booking_date == b.booking_date,
+                    Booking.court_id == new_court,
+                    Booking.start_time < new_end,
+                    Booking.end_time > new_time,
+                    Booking.id != booking_id
+                ).first()
+                if not existing:
+                    b.court_id = new_court
+                    b.start_time = new_time
+                    b.end_time = new_end
+                    db_act.commit()
+                    st.toast(f"✅ Jadwal {b.customer_name} berhasil dipindahkan ke Lapangan {new_court} ({new_time})!")
+                else:
+                    st.error(f"Gagal memindahkan: Lapangan dan jam sudah terisi oleh {existing.customer_name}!")
         elif action == "delete":
             booking_id = int(st.query_params.get("id", 0))
             b = db_act.query(Booking).filter(Booking.id == booking_id).first()
@@ -378,12 +388,13 @@ def show_move_dialog(booking_id: int, customer: str, old_court_id: int, old_time
                 existing = db_mov.query(Booking).filter(
                     Booking.booking_date == new_date_str,
                     Booking.court_id == new_court,
-                    Booking.start_time == new_time,
+                    Booking.start_time < new_end,
+                    Booking.end_time > new_time,
                     Booking.id != booking_id
                 ).first()
 
                 if existing:
-                    st.error(f"Gagal memindahkan: Pada tanggal {new_date_str}, lapangan dan jam tersebut sudah terisi oleh {existing.customer_name}!")
+                    st.error(f"Gagal memindahkan: Pada tanggal {new_date_str}, Lapangan {'A' if new_court == 1 else 'B'} jam {new_time} sudah terisi oleh {existing.customer_name} ({existing.start_time}-{existing.end_time})!")
                 else:
                     b = db_mov.query(Booking).filter(Booking.id == booking_id).first()
                     if b:
